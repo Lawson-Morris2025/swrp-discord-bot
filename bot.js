@@ -73,12 +73,21 @@ client.on('interactionCreate', async interaction => {
   if (interaction.commandName === 'startsession') {
 
     const embed = new EmbedBuilder()
-      .setTitle('🚔 SOUTH WALES RP SESSION STARTED')
-      .setDescription(
-A roleplay session is now active.  Please follow all server rules and maintain realistic roleplay.  ✅ Active Staff ✅ Professional RP ✅ Emergency Services Available ✅ Civilian Opportunities  We hope you enjoy your time in South Wales RP.
-      )
-      .setColor('Green')
-      .setTimestamp();
+  .setTitle('🚔 SOUTH WALES RP SESSION STARTED')
+  .setDescription(`
+A roleplay session is now active.
+
+Please follow all server rules and maintain realistic roleplay.
+
+✅ Active Staff  
+✅ Professional RP  
+✅ Emergency Services Available  
+✅ Civilian Opportunities  
+
+We hope you enjoy your time in South Wales RP.
+`)
+  .setColor('Green')
+  .setTimestamp();
 
     await interaction.channel.send({
       content: '@everyone',
