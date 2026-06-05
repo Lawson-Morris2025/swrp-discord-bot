@@ -1,40 +1,120 @@
-const {
-  Client,
-  GatewayIntentBits,
-  REST,
-  Routes,
-  SlashCommandBuilder,
-  EmbedBuilder,
-  PermissionFlagsBits,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle
-} = require("discord.js");
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 
-const fs = require("fs");
+// =====================
+// CONFIG (PUT YOUR IDS HERE)
+// =====================
+const TOKEN = "PASTE_BOT_TOKEN_HERE";
+const CLIENT_ID = "PASTE_APPLICATION_ID_HERE";
+const GUILD_ID = "PASTE_SERVER_ID_HERE";
 
-// ================= CONFIG =================
-const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
-
-// ================= CLIENT =================
+// =====================
+// CLIENT
+// =====================
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers
-  ]
+  intents: [GatewayIntentBits.Guilds]
 });
 
-// ================= STORAGE =================
-const file = "./storage.json";
+// =====================
+// COMMANDS
+// =====================
+const commands = [
+  new SlashCommandBuilder()
+    .setName('startsession')
+    .setDescription('Start a roleplay session'),
 
-function loadData() {
-  if (!fs.existsSync(file)) return {};
-  return JSON.parse(fs.readFileSync(file));
-}
+  new SlashCommandBuilder()
+    .setName('endsession')
+    .setDescription('End a roleplay session'),
 
-function saveData(data) {
+  new SlashCommandBuilder()
+    .setName('message')
+    .setDescription('Send a custom announcement')
+    .addStringOption(option =>
+      option.setName('text')
+        .setDescription('Message to send')
+        .setRequired(true)
+    )
+].map(cmd => cmd.toJSON());
+
+// =====================
+// REGISTER COMMANDS
+// =====================
+const rest = new REST({ version: '10' }).setToken(TOKEN);
+
+(async () => {
+  try {
+    console.log("Registering slash commands...");
+    await rest.put(
+      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+      { body: commands }
+    );
+    console.log("Commands registered!");
+  } catch (err) {
+    console.error(err);
+  }
+})();
+
+// =====================
+// BOT READY
+// =====================
+client.once('ready', () => {
+  console.log(`Logged in as ${client.user.tag}`);
+});
+
+// =====================
+// COMMAND HANDLER
+// =====================
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+
+  // START SESSION
+  if (interaction.commandName === 'startsession') {
+    const embed = new EmbedBuilder()
+      .setTitle("🚨 Roleplay Session Started")
+      .setDescription(
+        "A roleplay session is now ACTIVE.\n\n" +
+        "Please follow all server rules and maintain realistic roleplay.\n\n" +
+        "✅ Active Staff\n" +
+        "🚓 Emergency Services Available\n" +
+        "🚗 Civilian RP Open\n\n" +
+        "Enjoy South Wales RP!"
+      )
+      .setColor("Green");
+
+    return interaction.reply({ embeds: [embed] });
+  }
+
+  // END SESSION
+  if (interaction.commandName === 'endsession') {
+    const embed = new EmbedBuilder()
+      .setTitle("🔴 Roleplay Session Ended")
+      .setDescription(
+        "The roleplay session has now ENDED.\n\n" +
+        "Thank you to everyone who attended.\n" +
+        "We appreciate your support and hope to see you next time!"
+      )
+      .setColor("Red");
+
+    return interaction.reply({ embeds: [embed] });
+  }
+
+  // MESSAGE COMMAND
+  if (interaction.commandName === 'message') {
+    const text = interaction.options.getString('text');
+
+    const embed = new EmbedBuilder()
+      .setTitle("📢 Announcement")
+      .setDescription(text)
+      .setColor("Blue");
+
+    return interaction.reply({ embeds: [embed] });
+  }
+});
+
+// =====================
+// LOGIN
+// =====================
+client.login(TOKEN);function saveData(data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
 }
 
