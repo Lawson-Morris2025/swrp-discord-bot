@@ -1,0 +1,9 @@
+{
+  "name": "south-wales-rp-bot",
+  "version": "1.0.0",
+  "main": "bot.js",
+  "type": "commonjs",
+  "dependencies": {
+    "discord.js": "^14.0.0"
+  }
+}
