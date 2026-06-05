@@ -1,40 +1,142 @@
-const { Client, GatewayIntentBits, Partials, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { 
+    Client, 
+    GatewayIntentBits, 
+    REST, 
+    Routes, 
+    SlashCommandBuilder, 
+    PermissionsBitField 
+} = require('discord.js');
 
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
 
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildMessages
-    ]
+    intents: [GatewayIntentBits.Guilds]
 });
 
-const STAFF_ROLE_ID = "PUT_STAFF_ROLE_ID_HERE";
-const CIVILIAN_ROLE_ID = "PUT_CIVILIAN_ROLE_ID_HERE";
-const VERIFY_CHANNEL_ID = "PUT_VERIFY_CHANNEL_ID_HERE";
-const ANNOUNCE_CHANNEL_ID = "PUT_ANNOUNCE_CHANNEL_ID_HERE";
+// ---------------- COMMANDS ----------------
 
-// ---------------- READY ----------------
-client.once("ready", () => {
+const commands = [
+    new SlashCommandBuilder()
+        .setName('startsession')
+        .setDescription('Start a session'),
+
+    new SlashCommandBuilder()
+        .setName('endsession')
+        .setDescription('End a session'),
+
+    new SlashCommandBuilder()
+        .setName('announce')
+        .setDescription('Send an announcement')
+        .addStringOption(option =>
+            option.setName('message')
+                .setDescription('Announcement message')
+                .setRequired(true)
+        )
+].map(cmd => cmd.toJSON());
+
+// Register commands
+const rest = new REST({ version: '10' }).setToken(TOKEN);
+
+client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}`);
+
+    try {
+        await rest.put(
+            Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+            { body: commands }
+        );
+        console.log("Commands registered");
+    } catch (err) {
+        console.error(err);
+    }
 });
 
-// ---------------- VERIFY MESSAGE ----------------
-client.on("messageCreate", async (message) => {
-    if (message.content === "!verify-panel") {
-        const button = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId("verify")
-                .setLabel("VERIFY")
-                .setStyle(ButtonStyle.Success)
-        );
+// ---------------- COMMAND HANDLER ----------------
 
-        const embed = new EmbedBuilder()
-            .setTitle("Verification Required")
-            .setDescription("Click verify to gain access to the server.")
-            .setColor("Blue");
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isChatInputCommand()) return;
+
+    // ---------------- START SESSION ----------------
+    if (interaction.commandName === 'startsession') {
+
+        if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
+            return interaction.reply({ content: "No permission.", ephemeral: true });
+        }
+
+        const channel = interaction.guild.channels.cache.find(c => c.name === "verify");
+
+        if (channel) {
+            channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
+                SendMessages: false
+            });
+        }
+
+        return interaction.reply(
+`🟢 **SOUTH WALES RP SESSION STARTED**
+
+A roleplay session is now officially active. Please ensure you follow all server rules and maintain realistic roleplay at all times.
+
+━━━━━━━━━━━━━━━━━━
+✅ Active Staff Monitoring
+🚓 Emergency Services Available
+👮 Law Enforcement On Duty
+🏥 Medical Services Active
+🚗 Civilian RP Fully Open
+━━━━━━━━━━━━━━━━━━
+
+Have fun and enjoy your time in South Wales RP!`
+        );
+    }
+
+    // ---------------- END SESSION ----------------
+    if (interaction.commandName === 'endsession') {
+
+        if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
+            return interaction.reply({ content: "No permission.", ephemeral: true });
+        }
+
+        return interaction.reply(
+`🔴 **SOUTH WALES RP SESSION ENDED**
+
+The current roleplay session has now officially ended.
+
+━━━━━━━━━━━━━━━━━━
+📌 All RP activities are now closed
+🚓 Emergency services are off duty
+👮 Staff are no longer actively moderating RP
+🚗 Civilian operations paused
+━━━━━━━━━━━━━━━━━━
+
+Thank you to everyone who participated today.
+We hope to see you in the next session.`
+        );
+    }
+
+    // ---------------- ANNOUNCEMENT ----------------
+    if (interaction.commandName === 'announce') {
+
+        if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
+            return interaction.reply({ content: "No permission.", ephemeral: true });
+        }
+
+        const msg = interaction.options.getString('message');
+
+        const channel = interaction.guild.channels.cache.find(c => c.name === "announcements");
+
+        const text = `📢 **SOUTH WALES RP ANNOUNCEMENT**\n\n${msg}\n\n— Staff Team`;
+
+        if (channel) {
+            channel.send(text);
+        }
+
+        return interaction.reply({ content: "Announcement sent ✅", ephemeral: true });
+    }
+});
+
+// ---------------- LOGIN ----------------
+client.login(TOKEN);            .setColor("Blue");
 
         message.channel.send({ embeds: [embed], components: [button] });
     }
