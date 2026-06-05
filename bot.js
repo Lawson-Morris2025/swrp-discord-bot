@@ -1,40 +1,106 @@
-const { 
-    Client, 
-    GatewayIntentBits, 
-    REST, 
-    Routes, 
-    SlashCommandBuilder, 
-    EmbedBuilder, 
-    PermissionsBitField 
-} = require('discord.js');
+const { Client, GatewayIntentBits, Partials, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
 
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds]
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessages
+    ]
 });
 
-// ================= COMMANDS =================
+const STAFF_ROLE_ID = "PUT_STAFF_ROLE_ID_HERE";
+const CIVILIAN_ROLE_ID = "PUT_CIVILIAN_ROLE_ID_HERE";
+const VERIFY_CHANNEL_ID = "PUT_VERIFY_CHANNEL_ID_HERE";
+const ANNOUNCE_CHANNEL_ID = "PUT_ANNOUNCE_CHANNEL_ID_HERE";
 
-const commands = [
-    new SlashCommandBuilder()
-        .setName('startsession')
-        .setDescription('Start RP session'),
+// ---------------- READY ----------------
+client.once("ready", () => {
+    console.log(`Logged in as ${client.user.tag}`);
+});
 
-    new SlashCommandBuilder()
-        .setName('endsession')
-        .setDescription('End RP session'),
+// ---------------- VERIFY MESSAGE ----------------
+client.on("messageCreate", async (message) => {
+    if (message.content === "!verify-panel") {
+        const button = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId("verify")
+                .setLabel("VERIFY")
+                .setStyle(ButtonStyle.Success)
+        );
 
-    new SlashCommandBuilder()
-        .setName('message')
-        .setDescription('Send a custom announcement')
-        .addStringOption(option =>
-            option.setName('text')
-                .setDescription('What you want the bot to say')
-                .setRequired(true)
-        )
+        const embed = new EmbedBuilder()
+            .setTitle("Verification Required")
+            .setDescription("Click verify to gain access to the server.")
+            .setColor("Blue");
+
+        message.channel.send({ embeds: [embed], components: [button] });
+    }
+
+    // ANNOUNCEMENTS
+    if (message.content.startsWith("!announce")) {
+        if (!message.member.roles.cache.has(STAFF_ROLE_ID)) return;
+
+        const msg = message.content.slice(10);
+
+        const channel = await client.channels.fetch(ANNOUNCE_CHANNEL_ID);
+
+        const embed = new EmbedBuilder()
+            .setTitle("📢 Announcement")
+            .setDescription(msg)
+            .setColor("Red");
+
+        channel.send({ embeds: [embed] });
+    }
+
+    // START SESSION
+    if (message.content === "!startsession") {
+        if (!message.member.roles.cache.has(STAFF_ROLE_ID)) return;
+
+        const channel = message.channel;
+
+        const embed = new EmbedBuilder()
+            .setTitle("SOUTH WALES RP SESSION STARTED")
+            .setDescription("A roleplay session is now active.\n\n✅ Active Staff\n✅ Professional RP\n✅ Emergency Services Available\n✅ Civilian Opportunities")
+            .setColor("Green");
+
+        channel.send({ embeds: [embed] });
+    }
+
+    // END SESSION
+    if (message.content === "!endsession") {
+        if (!message.member.roles.cache.has(STAFF_ROLE_ID)) return;
+
+        const channel = message.channel;
+
+        const embed = new EmbedBuilder()
+            .setTitle("🔴 SOUTH WALES RP SESSION ENDED")
+            .setDescription("The roleplay session has ended.\nThank you for participating.")
+            .setColor("Red");
+
+        channel.send({ embeds: [embed] });
+    }
+});
+
+// ---------------- BUTTON HANDLER ----------------
+client.on("interactionCreate", async (interaction) => {
+    if (!interaction.isButton()) return;
+
+    if (interaction.customId === "verify") {
+        const member = interaction.member;
+
+        await member.roles.add(CIVILIAN_ROLE_ID);
+
+        await interaction.reply({
+            content: "✅ You are now verified!",
+            ephemeral: true
+        });
+    }
+});
+
+client.login(TOKEN);        )
 ].map(c => c.toJSON());
 
 // ================= REGISTER COMMANDS =================
