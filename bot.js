@@ -8,9 +8,9 @@ const {
   EmbedBuilder
 } = require('discord.js');
 
-const MTUxMjU2OTIwMzk0Nzg2NDEzNQ.G3t-l0.J-NS9wBCHKEBTr1CLF1uQqAWlCe2VQVkzUuHuY = process.env.TOKEN;
-const 1512569203947864135 = process.env.CLIENT_ID;
-const 1430518530171732013 = process.env.GUILD_ID;
+const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
