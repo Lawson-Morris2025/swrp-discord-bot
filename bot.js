@@ -1,11 +1,11 @@
-const { 
-    Client, 
-    GatewayIntentBits, 
-    REST, 
-    Routes, 
-    SlashCommandBuilder, 
-    PermissionsBitField 
-} = require('discord.js');
+const {
+    Client,
+    GatewayIntentBits,
+    REST,
+    Routes,
+    SlashCommandBuilder,
+    PermissionsBitField
+} = require("discord.js");
 
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
@@ -19,22 +19,113 @@ const client = new Client({
 
 const commands = [
     new SlashCommandBuilder()
-        .setName('startsession')
-        .setDescription('Start a session'),
+        .setName("startsession")
+        .setDescription("Start a roleplay session"),
 
     new SlashCommandBuilder()
-        .setName('endsession')
-        .setDescription('End a session'),
+        .setName("endsession")
+        .setDescription("End a roleplay session"),
 
     new SlashCommandBuilder()
-        .setName('announce')
-        .setDescription('Send an announcement')
+        .setName("announce")
+        .setDescription("Send a server announcement")
         .addStringOption(option =>
-            option.setName('message')
-                .setDescription('Announcement message')
+            option.setName("message")
+                .setDescription("Announcement message")
                 .setRequired(true)
         )
 ].map(cmd => cmd.toJSON());
+
+const rest = new REST({ version: "10" }).setToken(TOKEN);
+
+// ---------------- REGISTER COMMANDS ----------------
+
+client.once("ready", async () => {
+    console.log(`Logged in as ${client.user.tag}`);
+
+    try {
+        await rest.put(
+            Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+            { body: commands }
+        );
+
+        console.log("Slash commands registered");
+    } catch (err) {
+        console.error(err);
+    }
+});
+
+// ---------------- INTERACTIONS ----------------
+
+client.on("interactionCreate", async interaction => {
+    if (!interaction.isChatInputCommand()) return;
+
+    const isAdmin =
+        interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator);
+
+    // ---------------- START SESSION ----------------
+    if (interaction.commandName === "startsession") {
+        if (!isAdmin) {
+            return interaction.reply({ content: "No permission.", ephemeral: true });
+        }
+
+        return interaction.reply(
+`🟢 **SOUTH WALES RP SESSION STARTED**
+
+A roleplay session is now officially active.
+
+━━━━━━━━━━━━━━━━━━
+✅ Staff Online
+🚓 Police Active
+🚑 EMS Active
+👥 Civilians Allowed
+━━━━━━━━━━━━━━━━━━
+
+Please follow all server rules and enjoy roleplay.`
+        );
+    }
+
+    // ---------------- END SESSION ----------------
+    if (interaction.commandName === "endsession") {
+        if (!isAdmin) {
+            return interaction.reply({ content: "No permission.", ephemeral: true });
+        }
+
+        return interaction.reply(
+`🔴 **SOUTH WALES RP SESSION ENDED**
+
+The roleplay session has now ended.
+
+━━━━━━━━━━━━━━━━━━
+📌 RP is now closed
+🚓 Emergency services off duty
+👮 Staff monitoring reduced
+━━━━━━━━━━━━━━━━━━
+
+Thank you for participating.`
+        );
+    }
+
+    // ---------------- ANNOUNCE ----------------
+    if (interaction.commandName === "announce") {
+        if (!isAdmin) {
+            return interaction.reply({ content: "No permission.", ephemeral: true });
+        }
+
+        const msg = interaction.options.getString("message");
+
+        return interaction.reply(
+`📢 **ANNOUNCEMENT**
+
+${msg}
+
+— Staff Team`
+        );
+    }
+});
+
+// ---------------- LOGIN ----------------
+client.login(TOKEN);].map(cmd => cmd.toJSON());
 
 // Register commands
 const rest = new REST({ version: '10' }).setToken(TOKEN);
