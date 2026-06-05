@@ -103,12 +103,16 @@ We hope you enjoy your time in South Wales RP.
   if (interaction.commandName === 'endsession') {
 
     const embed = new EmbedBuilder()
-      .setTitle('🔴 SOUTH WALES RP SESSION ENDED')
-      .setDescription(
-The current roleplay session has ended.  Thank you to everyone who attended.  We appreciate your support and hope to see you at the next South Wales RP session.
-      )
-      .setColor('Red')
-      .setTimestamp();
+  .setTitle('🔴 SOUTH WALES RP SESSION ENDED')
+  .setDescription(`
+The current roleplay session has ended.
+
+Thank you to everyone who attended.
+
+We appreciate your support and hope to see you at the next South Wales RP session.
+`)
+  .setColor('Red')
+  .setTimestamp();
 
     await interaction.channel.send({
       content: '@everyone',
