@@ -1,80 +1,89 @@
 const {
   Client,
   GatewayIntentBits,
-  SlashCommandBuilder,
-  Routes,
   REST,
-  PermissionFlagsBits,
-  EmbedBuilder
+  Routes,
+  SlashCommandBuilder,
+  EmbedBuilder,
+  PermissionFlagsBits
 } = require('discord.js');
 
+// ===== ENV =====
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
+// ===== CLIENT =====
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
+// ===== COMMANDS =====
 const commands = [
-
   new SlashCommandBuilder()
     .setName('startsession')
-    .setDescription('Start a session'),
+    .setDescription('Start a RP session'),
 
   new SlashCommandBuilder()
     .setName('endsession')
-    .setDescription('End a session'),
+    .setDescription('End a RP session'),
 
   new SlashCommandBuilder()
     .setName('announce')
     .setDescription('Send an announcement')
     .addStringOption(option =>
-      option
-        .setName('title')
+      option.setName('title')
         .setDescription('Announcement title')
-        .setRequired(true))
+        .setRequired(true)
+    )
     .addStringOption(option =>
-      option
-        .setName('message')
+      option.setName('message')
         .setDescription('Announcement message')
-        .setRequired(true))
-    .addAttachmentOption(option =>
-      option
-        .setName('image')
-        .setDescription('Optional image'))
+        .setRequired(true)
+    )
+].map(cmd => cmd.toJSON());
 
-].map(command => command.toJSON());
-
+// ===== REGISTER COMMANDS =====
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 (async () => {
-  await rest.put(
-    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-    { body: commands }
-  );
+  try {
+    console.log("Registering slash commands...");
+
+    await rest.put(
+      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+      { body: commands }
+    );
+
+    console.log("Slash commands registered!");
+  } catch (err) {
+    console.error(err);
+  }
 })();
 
-client.on('interactionCreate', async interaction => {
+// ===== BOT READY =====
+client.once('ready', () => {
+  console.log(`Logged in as ${client.user.tag}`);
+});
 
+// ===== COMMAND HANDLER =====
+client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
-  if (
-    !interaction.member.permissions.has(
-      PermissionFlagsBits.Administrator
-    )
-  ) {
-    return interaction.reply({
-      content: 'You do not have permission.',
-      ephemeral: true
-    });
-  }
+  const { commandName } = interaction;
 
-  if (interaction.commandName === 'startsession') {
+  // ================= START SESSION =================
+  if (commandName === 'startsession') {
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+      return interaction.reply({
+        content: "❌ No permission.",
+        ephemeral: true
+      });
+    }
 
     const embed = new EmbedBuilder()
-  .setTitle('🚔 SOUTH WALES RP SESSION STARTED')
-  .setDescription(`
+      .setTitle('🟢 SOUTH WALES RP SESSION STARTED')
+      .setDescription(`
 A roleplay session is now active.
 
 Please follow all server rules and maintain realistic roleplay.
@@ -84,78 +93,59 @@ Please follow all server rules and maintain realistic roleplay.
 ✅ Emergency Services Available  
 ✅ Civilian Opportunities  
 
-We hope you enjoy your time in South Wales RP.
-`)
-  .setColor('Green')
-  .setTimestamp();
+Enjoy your time in South Wales RP.
+      `)
+      .setColor('Green')
+      .setTimestamp();
 
-    await interaction.channel.send({
-      content: '@everyone',
-      embeds: [embed]
-    });
-
-    await interaction.reply({
-      content: 'Session announcement sent.',
-      ephemeral: true
-    });
+    return interaction.reply({ embeds: [embed] });
   }
 
-  if (interaction.commandName === 'endsession') {
+  // ================= END SESSION =================
+  if (commandName === 'endsession') {
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+      return interaction.reply({
+        content: "❌ No permission.",
+        ephemeral: true
+      });
+    }
 
     const embed = new EmbedBuilder()
-  .setTitle('🔴 SOUTH WALES RP SESSION ENDED')
-  .setDescription(`
+      .setTitle('🔴 SOUTH WALES RP SESSION ENDED')
+      .setDescription(`
 The current roleplay session has ended.
 
 Thank you to everyone who attended.
 
-We appreciate your support and hope to see you at the next South Wales RP session.
-`)
-  .setColor('Red')
-  .setTimestamp();
+We appreciate your support and hope to see you next time.
+      `)
+      .setColor('Red')
+      .setTimestamp();
 
-    await interaction.channel.send({
-      content: '@everyone',
-      embeds: [embed]
-    });
-
-    await interaction.reply({
-      content: 'Session ended announcement sent.',
-      ephemeral: true
-    });
+    return interaction.reply({ embeds: [embed] });
   }
 
-  if (interaction.commandName === 'announce') {
+  // ================= ANNOUNCE =================
+  if (commandName === 'announce') {
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+      return interaction.reply({
+        content: "❌ No permission.",
+        ephemeral: true
+      });
+    }
 
-    const title =
-      interaction.options.getString('title');
-
-    const message =
-      interaction.options.getString('message');
-
-    const image =
-      interaction.options.getAttachment('image');
+    const title = interaction.options.getString('title');
+    const message = interaction.options.getString('message');
 
     const embed = new EmbedBuilder()
-      .setTitle(title)
+      .setTitle(`📢 ${title}`)
       .setDescription(message)
       .setColor('Blue')
       .setTimestamp();
 
-    if (image) {
-      embed.setImage(image.url);
-    }
-
-    await interaction.channel.send({
-      embeds: [embed]
-    });
-
-    await interaction.reply({
-      content: 'Announcement sent.',
-      ephemeral: true
-    });
+    return interaction.reply({ embeds: [embed] });
   }
-
 });
 
+// ===== LOGIN =====
 client.login(TOKEN);
