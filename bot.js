@@ -5,36 +5,195 @@ const {
   Routes,
   SlashCommandBuilder,
   EmbedBuilder,
-  PermissionFlagsBits
+  PermissionFlagsBits,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
 } = require('discord.js');
-
-const express = require('express');
 
 // ===== ENV =====
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-// ===== EXPRESS (FIXES RENDER PORT SCANNING) =====
-const app = express();
-
-app.get('/', (req, res) => {
-  res.send('SWRP Bot is running');
-});
-
-app.listen(process.env.PORT || 3000, () => {
-  console.log('Web server running');
-});
-
-// ===== DISCORD CLIENT =====
+// ===== CLIENT =====
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers
+  ]
 });
 
-// ===== SLASH COMMANDS =====
+// ===== SIMPLE MEMORY STORAGE =====
+const warnings = new Map();
+
+// ===== COMMANDS =====
 const commands = [
   new SlashCommandBuilder()
     .setName('startsession')
+    .setDescription('Start RP session'),
+
+  new SlashCommandBuilder()
+    .setName('endsession')
+    .setDescription('End RP session'),
+
+  new SlashCommandBuilder()
+    .setName('announce')
+    .setDescription('Send announcement')
+    .addStringOption(o =>
+      o.setName('title').setRequired(true).setDescription('Title'))
+    .addStringOption(o =>
+      o.setName('message').setRequired(true).setDescription('Message')),
+
+  new SlashCommandBuilder()
+    .setName('warn')
+    .setDescription('Warn a user')
+    .addUserOption(o =>
+      o.setName('user').setRequired(true))
+    .addStringOption(o =>
+      o.setName('reason').setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('warnings')
+    .setDescription('Check warnings')
+    .addUserOption(o =>
+      o.setName('user').setRequired(true))
+].map(c => c.toJSON());
+
+// ===== REGISTER COMMANDS =====
+const rest = new REST({ version: '10' }).setToken(TOKEN);
+
+(async () => {
+  await rest.put(
+    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+    { body: commands }
+  );
+})();
+
+// ===== READY =====
+client.once('ready', () => {
+  console.log(`Logged in as ${client.user.tag}`);
+});
+
+// ===== VERIFY BUTTON SYSTEM =====
+async function sendVerifyMessage(channel) {
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('verify')
+      .setLabel('Verify')
+      .setStyle(ButtonStyle.Success)
+  );
+
+  const embed = new EmbedBuilder()
+    .setTitle('🔐 Server Verification')
+    .setDescription('Click verify to gain access to the server and become a Civilian.')
+    .setColor('Blue');
+
+  await channel.send({ embeds: [embed], components: [row] });
+}
+
+// ===== INTERACTIONS =====
+client.on('interactionCreate', async interaction => {
+
+  // ===== BUTTONS =====
+  if (interaction.isButton()) {
+    if (interaction.customId === 'verify') {
+      const role = interaction.guild.roles.cache.find(r => r.name === 'Civilian');
+
+      if (!role) {
+        return interaction.reply({ content: 'Civilian role not found.', ephemeral: true });
+      }
+
+      await interaction.member.roles.add(role);
+
+      return interaction.reply({
+        content: '✅ You are now verified and have been given Civilian role!',
+        ephemeral: true
+      });
+    }
+  }
+
+  if (!interaction.isChatInputCommand()) return;
+
+  const isStaff = interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
+
+  // ===== START SESSION =====
+  if (interaction.commandName === 'startsession') {
+    if (!isStaff) return interaction.reply({ content: 'No permission', ephemeral: true });
+
+    const embed = new EmbedBuilder()
+      .setTitle('🟢 SESSION STARTED')
+      .setDescription('RP session is now active. Follow all rules.')
+      .setColor('Green');
+
+    return interaction.reply({ embeds: [embed] });
+  }
+
+  // ===== END SESSION =====
+  if (interaction.commandName === 'endsession') {
+    if (!isStaff) return interaction.reply({ content: 'No permission', ephemeral: true });
+
+    const embed = new EmbedBuilder()
+      .setTitle('🔴 SESSION ENDED')
+      .setDescription('Session has ended. Thank you for attending.')
+      .setColor('Red');
+
+    return interaction.reply({ embeds: [embed] });
+  }
+
+  // ===== ANNOUNCE =====
+  if (interaction.commandName === 'announce') {
+    if (!isStaff) return interaction.reply({ content: 'No permission', ephemeral: true });
+
+    const title = interaction.options.getString('title');
+    const message = interaction.options.getString('message');
+
+    const embed = new EmbedBuilder()
+      .setTitle(`📢 ${title}`)
+      .setDescription(message)
+      .setColor('Blue');
+
+    return interaction.reply({ embeds: [embed] });
+  }
+
+  // ===== WARN SYSTEM =====
+  if (interaction.commandName === 'warn') {
+    if (!isStaff) return interaction.reply({ content: 'No permission', ephemeral: true });
+
+    const user = interaction.options.getUser('user');
+    const reason = interaction.options.getString('reason');
+
+    if (!warnings.has(user.id)) warnings.set(user.id, []);
+
+    warnings.get(user.id).push({
+      reason,
+      staff: interaction.user.tag,
+      date: new Date().toLocaleString()
+    });
+
+    return interaction.reply(`⚠️ Warned ${user.tag} | Reason: ${reason}`);
+  }
+
+  // ===== VIEW WARNINGS =====
+  if (interaction.commandName === 'warnings') {
+    const user = interaction.options.getUser('user');
+
+    const userWarnings = warnings.get(user.id) || [];
+
+    if (userWarnings.length === 0) {
+      return interaction.reply(`${user.tag} has no warnings.`);
+    }
+
+    const list = userWarnings
+      .map((w, i) => `${i + 1}. ${w.reason} (by ${w.staff})`)
+      .join('\n');
+
+    return interaction.reply(`⚠️ Warnings for ${user.tag}:\n\n${list}`);
+  }
+});
+
+// ===== LOGIN =====
+client.login(TOKEN);    .setName('startsession')
     .setDescription('Start RP session'),
 
   new SlashCommandBuilder()
