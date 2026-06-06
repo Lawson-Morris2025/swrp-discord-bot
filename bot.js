@@ -32,6 +32,7 @@ const config = {
     CLIENT_ID: process.env.CLIENT_ID,
     GUILD_ID: process.env.GUILD_ID,
     ANNOUNCEMENT_CHANNEL_ID: process.env.ANNOUNCEMENT_CHANNEL_ID,
+    SESSION_CHANNEL_ID: process.env.SESSION_CHANNEL_ID, // Added for separate sessions channel
     UNVERIFIED_ROLE_ID: process.env.VERIFY_ROLE_ID,
     CIVILIAN_ROLE_ID: process.env.CIVILIAN_ROLE_ID
 };
@@ -145,7 +146,6 @@ client.on('interactionCreate', async (interaction) => {
         return;
     }
 
-    // Direct active fetching instead of just looking at the quick cache
     const currentGuild = interaction.guild || await client.guilds.fetch(interaction.guildId).catch(() => null);
     if (!currentGuild) {
         if (interaction.isRepliable()) {
@@ -157,13 +157,11 @@ client.on('interactionCreate', async (interaction) => {
     // ---- Handle Slash Commands ----
     if (interaction.isChatInputCommand()) {
         const { commandName, channel } = interaction;
-        
-        // Active fetch for the announcement channel to completely skip cache errors
-        const announcementChannel = await currentGuild.channels.fetch(config.ANNOUNCEMENT_CHANNEL_ID).catch(() => null);
 
         try {
             if (commandName === 'startsession') {
-                if (!announcementChannel) return interaction.reply({ content: '❌ Announcement channel not found. Double check your ANNOUNCEMENT_CHANNEL_ID on Render!', ephemeral: true });
+                const sessionChannel = await currentGuild.channels.fetch(config.SESSION_CHANNEL_ID).catch(() => null);
+                if (!sessionChannel) return interaction.reply({ content: '❌ Sessions channel not found. Check your SESSION_CHANNEL_ID environment variable on Render!', ephemeral: true });
                 
                 const embed = new EmbedBuilder()
                     .setTitle('🔵 SOUTH WALES RP SESSION STARTED')
@@ -179,12 +177,13 @@ client.on('interactionCreate', async (interaction) => {
                     .setColor('#0000FF')
                     .setTimestamp();
 
-                await announcementChannel.send({ content: '@everyone', embeds: [embed] });
-                return interaction.reply({ content: '✅ Session startup posted successfully!', ephemeral: true });
+                await sessionChannel.send({ content: '@everyone', embeds: [embed] });
+                return interaction.reply({ content: '✅ Session startup posted to sessions channel!', ephemeral: true });
             }
 
             if (commandName === 'endsession') {
-                if (!announcementChannel) return interaction.reply({ content: '❌ Announcement channel not found. Double check your ANNOUNCEMENT_CHANNEL_ID on Render!', ephemeral: true });
+                const sessionChannel = await currentGuild.channels.fetch(config.SESSION_CHANNEL_ID).catch(() => null);
+                if (!sessionChannel) return interaction.reply({ content: '❌ Sessions channel not found. Check your SESSION_CHANNEL_ID environment variable on Render!', ephemeral: true });
 
                 const embed = new EmbedBuilder()
                     .setTitle('🔴 SOUTH WALES RP SESSION ENDED')
@@ -196,12 +195,13 @@ client.on('interactionCreate', async (interaction) => {
                     .setColor('#FF0000')
                     .setTimestamp();
 
-                await announcementChannel.send({ content: '@everyone', embeds: [embed] });
-                return interaction.reply({ content: '✅ Session end posted successfully!', ephemeral: true });
+                await sessionChannel.send({ content: '@everyone', embeds: [embed] });
+                return interaction.reply({ content: '✅ Session end posted to sessions channel!', ephemeral: true });
             }
 
             if (commandName === 'announce') {
-                if (!announcementChannel) return interaction.reply({ content: '❌ Announcement channel not found. Double check your ANNOUNCEMENT_CHANNEL_ID on Render!', ephemeral: true });
+                const announcementChannel = await currentGuild.channels.fetch(config.ANNOUNCEMENT_CHANNEL_ID).catch(() => null);
+                if (!announcementChannel) return interaction.reply({ content: '❌ Announcement channel not found. Check your ANNOUNCEMENT_CHANNEL_ID environment variable on Render!', ephemeral: true });
 
                 const title = interaction.options.getString('title');
                 const message = interaction.options.getString('message');
