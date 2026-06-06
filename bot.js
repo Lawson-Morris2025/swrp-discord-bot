@@ -11,6 +11,22 @@ const {
 const express = require('express');
 const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
+const multer = require('multer'); // Handles raw file uploads
+const path = require('path');
+const fs = require('fs');
+
+// Create upload directory if it doesn't exist
+const uploadDir = path.join(__dirname, 'public/uploads');
+if (!fs.existsSync(uploadDir)){
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// Configure how files are saved locally
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, uploadDir),
+    filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname.replace(/[^a-zA-Z0-9.]/g, "_"))
+});
+const upload = multer({ storage: storage });
 
 // ==========================================
 // 1. INITIALIZATION & DYNAMIC CONFIG
@@ -29,13 +45,15 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
 
-// Configurations link to Render environment variables where needed
+// Serve uploaded images publicly so Discord can fetch them
+app.use('/uploads', express.static(uploadDir));
+
 const CONFIG = {
     TOKEN: process.env.TOKEN,
     PORT: process.env.PORT || 10000,
     PURPLE_HEX: '#7B2CBF', 
     DASHBOARD_PASSWORD: process.env.DASHBOARD_PASSWORD || 'StaffPass123',
-    FIXED_TICKET_CHANNEL_ID: '1512552819172053172', // Permanently bound channel
+    FIXED_TICKET_CHANNEL_ID: '1512552819172053172',
     CHANNELS: {
         ANNOUNCEMENTS: process.env.ANNOUNCEMENTS_CHANNEL_ID,
         TICKET_LOGS: process.env.TICKET_LOG_CHANNEL_ID,
@@ -111,6 +129,14 @@ const UI_STYLE = `
     table { width: 100%; border-collapse: collapse; margin-top: 15px; text-align: left; }
     th { background: var(--purple-light); color: var(--purple-dark); padding: 12px; font-weight: 600; }
     td { padding: 12px; border-bottom: 1px solid var(--border-color); }
+
+    /* Drag and Drop Zone styling layouts */
+    .drop-zone { border: 2px dashed #7B2CBF; background: #F9F5FF; border-radius: 8px; padding: 25px; text-align: center; cursor: pointer; transition: background 0.2s; margin-bottom: 15px; }
+    .drop-zone.drag-over { background: #EEDDFF; border-color: #5A189A; }
+    .preview-thumbnails { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+    .thumb-container { position: relative; width: 80px; height: 80px; border: 1px solid #E2E8F0; border-radius: 6px; overflow: hidden; background: #FFF; }
+    .thumb-container img { width: 100%; height: 100%; object-fit: cover; }
+    .thumb-remove { position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,0.6); color: white; border: none; border-radius: 50%; width: 18px; height: 18px; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; }
 </style>
 `;
 
@@ -167,7 +193,8 @@ app.get('/announcements', checkAuth, (req, res) => {
             <h2>📢 Announcements Hub</h2>
             <p>Post interactive macros or custom news notifications instantly into your server announcements channel.</p>
             
-            <form method="POST" action="/announcements/dispatch">
+            <!-- Switched form to enctype multipart/form-data to allow files -->
+            <form method="POST" action="/announcements/dispatch" enctype="multipart/form-data">
                 <label style="font-weight: bold; display: block; margin-bottom: 5px;">Select Option Template</label>
                 <select name="type" id="templateSelect" onchange="updatePreview()">
                     <option value="START">🟢 Broadcast: Start Session Template</option>
@@ -182,8 +209,13 @@ app.get('/announcements', checkAuth, (req, res) => {
                     <label style="font-weight: bold; display: block; margin-bottom: 5px;">Custom Announcement Message</label>
                     <textarea name="message" id="customMessage" rows="4" placeholder="Type customized notices here..." oninput="updatePreview()"></textarea>
 
-                    <label style="font-weight: bold; display: block; margin-bottom: 5px;">Optional Photo URL Attachment</label>
-                    <input type="text" name="imageUrl" placeholder="https://i.imgur.com/example.png" />
+                    <label style="font-weight: bold; display: block; margin-bottom: 5px;">Attached Photo Attachments (Drag & Drop Multiple files)</label>
+                    <div class="drop-zone" id="dropZone">
+                        <span style="color: #5A189A; font-weight: 600;">Click to select or drop images here</span>
+                        <input type="file" name="photos" id="fileInput" multiple accept="image/*" style="display: none;" />
+                    </div>
+                    
+                    <div class="preview-thumbnails" id="thumbGroup"></div>
                 </div>
 
                 <button type="submit" class="btn">Send Announcement</button>
@@ -193,6 +225,42 @@ app.get('/announcements', checkAuth, (req, res) => {
         <script>
             const startText = "🏴󠁧󠁢󠁷󠁬󠁳󠁿 **SOUTH WALES RP SESSION STARTED** 🏴󠁧󠁢󠁷󠁬󠁳󠁿\\n\\nA roleplay session is now active. Please follow all server rules and maintain realistic roleplay.\\n\\n🔹 **Active Staff On Duty**\\n🔹 **Professional RP Expected**\\n🔹 **Emergency Services Available**\\n🔹 **Civilian Opportunities Open**\\n\\nEnjoy your time in South Wales RP!";
             const endText = "🏴󠁧󠁢󠁷󠁬󠁳󠁿 **SOUTH WALES RP SESSION ENDED** 🏴󠁧󠁢󠁷󠁬󠁳󠁿\\n\\nThe current roleplay session has ended. Thank you to everyone who attended.\\n\\nWe appreciate your support and hope to see you next time.";
+
+            const dropZone = document.getElementById('dropZone');
+            const fileInput = document.getElementById('fileInput');
+            const thumbGroup = document.getElementById('thumbGroup');
+
+            // Click interaction triggers hidden input fields
+            dropZone.addEventListener('click', () => fileInput.click());
+
+            // Drag/Drop event listeners
+            dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('drag-over');
+                if(e.dataTransfer.files.length > 0) {
+                    fileInput.files = e.dataTransfer.files;
+                    handleThumbnails(e.dataTransfer.files);
+                }
+            });
+
+            fileInput.addEventListener('change', (e) => handleThumbnails(e.target.files));
+
+            function handleThumbnails(files) {
+                thumbGroup.innerHTML = '';
+                Array.from(files).forEach((file, index) => {
+                    if(!file.type.startsWith('image/')) return;
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const container = document.createElement('div');
+                        container.className = 'thumb-container';
+                        container.innerHTML = \`<img src="\${e.target.result}" /><button type="button" class="thumb-remove" onclick="this.parentElement.remove()">×</button>\`;
+                        thumbGroup.appendChild(container);
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }
 
             function updatePreview() {
                 const select = document.getElementById('templateSelect');
@@ -216,25 +284,62 @@ app.get('/announcements', checkAuth, (req, res) => {
     `));
 });
 
-app.post('/announcements/dispatch', checkAuth, async (req, res) => {
-    const { type, message, imageUrl } = req.body;
+// Post processing handles array data parsing
+app.post('/announcements/dispatch', checkAuth, upload.array('photos', 10), async (req, res) => {
+    const { type, message } = req.body;
     const channel = client.channels.cache.get(CONFIG.CHANNELS.ANNOUNCEMENTS);
     if (!channel) return res.send("<script>alert('Announcements channel not found.'); window.location='/announcements';</script>");
 
-    const embed = new EmbedBuilder().setColor(CONFIG.PURPLE_HEX).setTimestamp();
+    // Construct the public URL domain scheme dynamically
+    const domainHost = req.get('host');
+    const protocolScheme = req.protocol;
+    
+    // Store all generated public file URLs 
+    let imageUrls = [];
+    if(req.files && req.files.length > 0) {
+        imageUrls = req.files.map(file => `${protocolScheme}://${domainHost}/uploads/${file.filename}`);
+    }
 
     if (type === 'START') {
-        embed.setTitle('A roleplay session is now active. Please follow all server rules and maintain realistic roleplay.')
-             .setDescription('🔹 **Active Staff On Duty**\n🔹 **Professional RP Expected**\n🔹 **Emergency Services Available**\n🔹 **Civilian Opportunities Open**\n\nEnjoy your time in South Wales RP!');
+        const embed = new EmbedBuilder()
+            .setColor(CONFIG.PURPLE_HEX)
+            .setTimestamp()
+            .setTitle('A roleplay session is now active. Please follow all server rules and maintain realistic roleplay.')
+            .setDescription('🔹 **Active Staff On Duty**\n🔹 **Professional RP Expected**\n🔹 **Emergency Services Available**\n🔹 **Civilian Opportunities Open**\n\nEnjoy your time in South Wales RP!');
         await channel.send({ content: '🏴󠁧󠁢󠁷󠁬󠁳󠁿 **SOUTH WALES RP SESSION STARTED** 🏴󠁧󠁢󠁷󠁬󠁳󠁿', embeds: [embed] });
     } else if (type === 'END') {
-        embed.setTitle('The current roleplay session has ended. Thank you to everyone who attended.')
-             .setDescription('We appreciate your support and hope to see you next time.');
+        const embed = new EmbedBuilder()
+            .setColor(CONFIG.PURPLE_HEX)
+            .setTimestamp()
+            .setTitle('The current roleplay session has ended. Thank you to everyone who attended.')
+            .setDescription('We appreciate your support and hope to see you next time.');
         await channel.send({ content: '🏴󠁧󠁢󠁷󠁬󠁳󠁿 **SOUTH WALES RP SESSION ENDED** 🏴󠁧󠁢󠁷󠁬󠁳󠁿', embeds: [embed] });
     } else if (type === 'CUSTOM') {
-        embed.setTitle('South Wales RP | Server Notice').setDescription(message);
-        if (imageUrl) embed.setImage(imageUrl);
-        await channel.send({ embeds: [embed] });
+        
+        let targetEmbeds = [];
+
+        if (imageUrls.length === 0) {
+            // Standard single text embed
+            const embed = new EmbedBuilder()
+                .setColor(CONFIG.PURPLE_HEX)
+                .setTitle('South Wales RP | Server Notice')
+                .setDescription(message)
+                .setTimestamp();
+            targetEmbeds.push(embed);
+        } else {
+            // Loop array into connected grouped embeds (Makes Discord format them into a gallery grid style)
+            imageUrls.forEach((url, i) => {
+                const embed = new EmbedBuilder().setColor(CONFIG.PURPLE_HEX).setURL('https://discord.com').setImage(url);
+                
+                // Only bind the text content to the first element box frame
+                if (i === 0) {
+                    embed.setTitle('South Wales RP | Server Notice').setDescription(message).setTimestamp();
+                }
+                targetEmbeds.push(embed);
+            });
+        }
+
+        await channel.send({ embeds: targetEmbeds });
     }
 
     res.send("<script>alert('Announcement broadcasted cleanly!'); window.location='/announcements';</script>");
