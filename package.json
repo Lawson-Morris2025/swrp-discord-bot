@@ -1,7 +1,16 @@
-"dependencies": {
+{
+  "name": "swrp-discord-bot",
+  "version": "1.0.0",
+  "description": "South Wales RP Discord Bot and Staff Dashboard",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
     "body-parser": "^1.20.2",
     "cookie-parser": "^1.4.6",
     "discord.js": "^14.14.1",
     "express": "^4.18.2",
     "multer": "^1.4.5-lts.1"
   }
+}
