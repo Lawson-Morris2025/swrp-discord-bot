@@ -6,7 +6,13 @@ const {
     ButtonBuilder, 
     ButtonStyle, 
     ChannelType,
-    PermissionFlagsBits
+    PermissionFlagsBits,
+    REST,
+    Routes,
+    SlashCommandBuilder,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle
 } = require('discord.js');
 const express = require('express');
 const bodyParser = require('body-parser');
@@ -55,7 +61,7 @@ const CONFIG = {
     DASHBOARD_PASSWORD: process.env.DASHBOARD_PASSWORD || 'StaffPass123',
     FIXED_TICKET_CHANNEL_ID: '1512552819172053172',
     CHANNELS: {
-        ANNOUNCEMENTS: '1512759729829580800', // Hardcoded directly to your server channel
+        ANNOUNCEMENTS: '1512759729829580800', 
         TICKET_LOGS: process.env.TICKET_LOG_CHANNEL_ID,
         MOD_LOGS: process.env.MOD_LOGS_CHANNEL_ID,
         CATEGORY_TICKETS: process.env.TICKET_CATEGORY_ID
@@ -283,7 +289,6 @@ app.get('/announcements', checkAuth, (req, res) => {
 app.post('/announcements/dispatch', checkAuth, upload.array('photos', 10), async (req, res) => {
     const { type, message } = req.body;
     
-    // Smart Fetch: Tries Cache first, falls back to direct live API fetch
     let channel = client.channels.cache.get(CONFIG.CHANNELS.ANNOUNCEMENTS);
     if (!channel) {
         try {
@@ -460,7 +465,107 @@ app.post('/modding/execute', checkAuth, async (req, res) => {
 // ==========================================
 // 4. DISCORD BOT ACTIONS & EVENT INTERFACES
 // ==========================================
+
+// Auto-assign Unverified role when someone joins
+client.on('guildMemberAdd', async (member) => {
+    const unverifiedRole = member.guild.roles.cache.find(r => r.name.toLowerCase() === 'unverified');
+    if (unverifiedRole) {
+        await member.roles.add(unverifiedRole).catch(err => console.error("Error setting welcome role:", err));
+    }
+});
+
 client.on('interactionCreate', async (interaction) => {
+    // Handle Slash Commands
+    if (interaction.isChatInputCommand()) {
+        if (interaction.commandName === 'setverify') {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+                return interaction.reply({ content: '❌ You lack authorizations to run this config setup.', ephemeral: true });
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor(CONFIG.PURPLE_HEX)
+                .setTitle('🏴󠁧󠁢󠁷󠁬󠁳󠁿 South Wales RP | Verification Portal')
+                .setDescription('Welcome! To gain full civilian access to the server, click the button below to link your Roblox username.\n\n**Note:** This instantly clears your **Unverified** status, updates your server name, and activates your **Civilian** role profile.');
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('trigger_verify_modal')
+                    .setLabel('Verify Account')
+                    .setEmoji('✅')
+                    .setStyle(ButtonStyle.Success)
+            );
+
+            await interaction.channel.send({ embeds: [embed], components: [row] });
+            return interaction.reply({ content: '🚀 Verification portal posted securely inside this workspace channel!', ephemeral: true });
+        }
+    }
+
+    // Handle Button Click (Triggers the Modal Prompt)
+    if (interaction.isButton() && interaction.customId === 'trigger_verify_modal') {
+        const modal = new ModalBuilder()
+            .setCustomId('roblox_verify_modal')
+            .setTitle('SWRP Account Verification');
+
+        const robloxInput = new TextInputBuilder()
+            .setCustomId('roblox_username_input')
+            .setLabel('What is your Roblox username?')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Enter username here...')
+            .setRequired(true)
+            .setMinLength(3)
+            .setMaxLength(20);
+
+        const firstActionRow = new ActionRowBuilder().addComponents(robloxInput);
+        modal.addComponents(firstActionRow);
+
+        return interaction.showModal(modal);
+    }
+
+    // Handle Modal Submission (Processes username, changes nickname, swaps roles)
+    if (interaction.isModalSubmit() && interaction.customId === 'roblox_verify_modal') {
+        await interaction.deferReply({ ephemeral: true });
+        
+        const { guild, user } = interaction;
+        const robloxUsername = interaction.fields.getTextInputValue('roblox_username_input');
+        
+        const unverifiedRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'unverified');
+        const civilianRole = guild.roles.cache.find(r => r.name.toLowerCase() === 'civilian');
+        
+        if (!civilianRole) {
+            return interaction.editReply({ content: '❌ System Error: A server role named exactly "Civilian" could not be detected.' });
+        }
+        
+        try {
+            const member = await guild.members.fetch(user.id);
+            
+            // Step 1: Format and change nickname to: DiscordName (RobloxUsername)
+            // Note: Max character limit for Discord nicknames is 32 characters
+            let formattedName = `${user.username} (${robloxUsername})`;
+            if (formattedName.length > 32) {
+                formattedName = formattedName.substring(0, 29) + '...';
+            }
+            
+            // Try updating nickname (will intentionally fail on server owners due to Discord limitations)
+            await member.setNickname(formattedName).catch(err => {
+                console.warn(`Could not adjust nickname for ${user.username}. (Likely server owner or high admin hierarchy permissions)`);
+            });
+
+            // Step 2: Remove unverified role if they have it
+            if (unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
+                await member.roles.remove(unverifiedRole);
+            }
+            
+            // Step 3: Add Civilian role
+            await member.roles.add(civilianRole);
+            
+            return interaction.editReply({ content: `✅ Verification successful! Your profile name has been set to **${formattedName}** and your Civilian clearance is open.` });
+        } catch (err) {
+            console.error(err);
+            return interaction.editReply({ content: '❌ Role swap adjustment rejected. Ensure the bot role sits ABOVE both the "Unverified" and "Civilian" roles in your Server Settings role hierarchy.' });
+        }
+    }
+
+    // Handle Support Ticket Buttons
     if (!interaction.isButton()) return;
     const { guild, user, channel, customId } = interaction;
 
@@ -509,11 +614,30 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 // ==========================================
-// 5. RUNTIME STARTUP
+// 5. RUNTIME STARTUP & REGISTER COMMANDS
 // ==========================================
-client.once('ready', () => {
+client.once('ready', async () => {
     console.log(`🤖 Logged into Discord API as ${client.user.tag}`);
     app.listen(CONFIG.PORT, () => console.log(`🌐 Light-Purple Web UI operational on port ${CONFIG.PORT}`));
+
+    const commands = [
+        new SlashCommandBuilder()
+            .setName('setverify')
+            .setDescription('Spawns the SWRP click-to-verify secure login portal embed.')
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
+    ].map(command => command.toJSON());
+
+    const rest = new REST({ version: '10' }).setToken(CONFIG.TOKEN);
+    try {
+        console.log('🔄 Deploying application (/) commands configuration...');
+        await rest.put(
+            Routes.applicationCommands(client.user.id),
+            { body: commands },
+        );
+        console.log('✅ Global application slash commands initialized cleanly!');
+    } catch (error) {
+        console.error('❌ Error handling command sync injection matrix:', error);
+    }
 });
 
 client.login(CONFIG.TOKEN);
