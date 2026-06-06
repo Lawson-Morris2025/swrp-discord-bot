@@ -3,12 +3,6 @@ const {
     GatewayIntentBits, 
     PermissionFlagsBits, 
     EmbedBuilder, 
-    ActionRowBuilder, 
-    ButtonBuilder, 
-    ButtonStyle, 
-    ModalBuilder, 
-    TextInputBuilder, 
-    TextInputStyle,
     REST,
     Routes,
     ApplicationCommandOptionType,
@@ -32,7 +26,7 @@ const config = {
     CLIENT_ID: process.env.CLIENT_ID,
     GUILD_ID: process.env.GUILD_ID,
     ANNOUNCEMENT_CHANNEL_ID: process.env.ANNOUNCEMENT_CHANNEL_ID,
-    SESSION_CHANNEL_ID: process.env.SESSION_CHANNEL_ID, // Added for separate sessions channel
+    SESSION_CHANNEL_ID: process.env.SESSION_CHANNEL_ID,
     UNVERIFIED_ROLE_ID: process.env.VERIFY_ROLE_ID,
     CIVILIAN_ROLE_ID: process.env.CIVILIAN_ROLE_ID
 };
@@ -92,8 +86,20 @@ const commands = [
     },
     {
         name: 'setverify',
-        description: 'Spawns the verification panel in this channel',
+        description: 'Spawns the verification instructions embed in this channel',
         default_member_permissions: PermissionFlagsBits.Administrator.toString()
+    },
+    {
+        name: 'verify',
+        description: 'Verify your account using your Roblox username',
+        options: [
+            {
+                name: 'username',
+                description: 'Your exact Roblox username',
+                type: ApplicationCommandOptionType.String,
+                required: true
+            }
+        ]
     }
 ];
 
@@ -161,7 +167,7 @@ client.on('interactionCreate', async (interaction) => {
         try {
             if (commandName === 'startsession') {
                 const sessionChannel = await currentGuild.channels.fetch(config.SESSION_CHANNEL_ID).catch(() => null);
-                if (!sessionChannel) return interaction.reply({ content: '❌ Sessions channel not found. Check your SESSION_CHANNEL_ID environment variable on Render!', ephemeral: true });
+                if (!sessionChannel) return interaction.reply({ content: '❌ Sessions channel not found. Check Render config.', ephemeral: true });
                 
                 const embed = new EmbedBuilder()
                     .setTitle('🔵 SOUTH WALES RP SESSION STARTED')
@@ -178,12 +184,12 @@ client.on('interactionCreate', async (interaction) => {
                     .setTimestamp();
 
                 await sessionChannel.send({ content: '@everyone', embeds: [embed] });
-                return interaction.reply({ content: '✅ Session startup posted to sessions channel!', ephemeral: true });
+                return interaction.reply({ content: '✅ Session startup posted!', ephemeral: true });
             }
 
             if (commandName === 'endsession') {
                 const sessionChannel = await currentGuild.channels.fetch(config.SESSION_CHANNEL_ID).catch(() => null);
-                if (!sessionChannel) return interaction.reply({ content: '❌ Sessions channel not found. Check your SESSION_CHANNEL_ID environment variable on Render!', ephemeral: true });
+                if (!sessionChannel) return interaction.reply({ content: '❌ Sessions channel not found. Check Render config.', ephemeral: true });
 
                 const embed = new EmbedBuilder()
                     .setTitle('🔴 SOUTH WALES RP SESSION ENDED')
@@ -196,12 +202,12 @@ client.on('interactionCreate', async (interaction) => {
                     .setTimestamp();
 
                 await sessionChannel.send({ content: '@everyone', embeds: [embed] });
-                return interaction.reply({ content: '✅ Session end posted to sessions channel!', ephemeral: true });
+                return interaction.reply({ content: '✅ Session end posted!', ephemeral: true });
             }
 
             if (commandName === 'announce') {
                 const announcementChannel = await currentGuild.channels.fetch(config.ANNOUNCEMENT_CHANNEL_ID).catch(() => null);
-                if (!announcementChannel) return interaction.reply({ content: '❌ Announcement channel not found. Check your ANNOUNCEMENT_CHANNEL_ID environment variable on Render!', ephemeral: true });
+                if (!announcementChannel) return interaction.reply({ content: '❌ Announcement channel not found. Check Render config.', ephemeral: true });
 
                 const title = interaction.options.getString('title');
                 const message = interaction.options.getString('message');
@@ -223,79 +229,56 @@ client.on('interactionCreate', async (interaction) => {
 
             if (commandName === 'setverify') {
                 const embed = new EmbedBuilder()
-                    .setTitle('✅ Verification Required')
-                    .setDescription('Welcome to South Wales RP.\n\nTo access the server, click Verify below and enter your Roblox username.')
-                    .setColor('#00FF00');
+                    .setTitle('🔐 Verification Required')
+                    .setDescription(
+                        'Welcome to **South Wales Roleplay**!\n\n' +
+                        'To prevent alt accounts and keep our community safe, you must verify your Roblox username before gaining full server access.\n\n' +
+                        '👉 **How to Verify:**\n' +
+                        'Type **`/verify`** in the chat bar below, click the command pop-up, enter your exact Roblox username, and press Enter.\n\n' +
+                        '*Example:* `/verify username:MyRobloxName`\n\n' +
+                        'Once done, the bot will instantly update your nickname and unlock the server!'
+                    )
+                    .setColor('#00FF00')
+                    .setFooter({ text: 'South Wales RP Protection System' });
 
-                const row = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId('verify_btn')
-                        .setLabel('Verify')
-                        .setStyle(ButtonStyle.Success)
-                );
+                await channel.send({ embeds: [embed] });
+                return interaction.reply({ content: '✅ Instruction board posted successfully!', ephemeral: true });
+            }
 
-                await channel.send({ embeds: [embed], components: [row] });
-                return interaction.reply({ content: '✅ Verification panel setup complete!', ephemeral: true });
+            if (commandName === 'verify') {
+                await interaction.deferReply({ ephemeral: true });
+                
+                const robloxUsername = interaction.options.getString('username');
+                const member = interaction.member;
+                const discordName = member.user.username;
+
+                try {
+                    const targetNickname = `${discordName} - ${robloxUsername}`;
+                    await member.setNickname(targetNickname.substring(0, 32));
+
+                    const unverifiedRole = await currentGuild.roles.fetch(config.UNVERIFIED_ROLE_ID).catch(() => null);
+                    const civilianRole = await currentGuild.roles.fetch(config.CIVILIAN_ROLE_ID).catch(() => null);
+
+                    if (civilianRole) await member.roles.add(civilianRole);
+                    if (unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
+                        await member.roles.remove(unverifiedRole);
+                    }
+
+                    return interaction.editReply({ 
+                        content: `✅ Success! Your nickname has been updated to **${targetNickname}** and you now have access to the server.` 
+                    });
+
+                } catch (error) {
+                    console.error('Verification Error:', error);
+                    return interaction.editReply({ 
+                        content: '❌ Verification failed. Ensure the bot\'s role is dragged HIGHER than both the Civilian and Unverified roles in server settings, and that it has Manage Nicknames permissions.' 
+                    });
+                }
             }
 
         } catch (error) {
             console.error(`Error processing command ${commandName}:`, error);
             return interaction.reply({ content: '❌ An error occurred executing this command.', ephemeral: true }).catch(() => {});
-        }
-    }
-
-    // ---- Handle Button Click ----
-    if (interaction.isButton()) {
-        if (interaction.customId === 'verify_btn') {
-            const modal = new ModalBuilder()
-                .setCustomId('verify_modal')
-                .setTitle('Roblox Verification');
-
-            const robloxInput = new TextInputBuilder()
-                .setCustomId('roblox_username')
-                .setLabel('Roblox Username')
-                .setStyle(TextInputStyle.Short)
-                .setPlaceholder('Enter your exact username here')
-                .setRequired(true);
-
-            const row = new ActionRowBuilder().addComponents(robloxInput);
-            modal.addComponents(row);
-
-            await interaction.showModal(modal);
-        }
-    }
-
-    // ---- Handle Modal Submission ----
-    if (interaction.isModalSubmit()) {
-        if (interaction.customId === 'verify_modal') {
-            await interaction.deferReply({ ephemeral: true });
-
-            const robloxUsername = interaction.fields.getTextInputValue('roblox_username');
-            const member = interaction.member;
-            const discordName = member.user.username;
-
-            try {
-                const targetNickname = `${discordName} - ${robloxUsername}`;
-                await member.setNickname(targetNickname.substring(0, 32));
-
-                const unverifiedRole = await currentGuild.roles.fetch(config.UNVERIFIED_ROLE_ID).catch(() => null);
-                const civilianRole = await currentGuild.roles.fetch(config.CIVILIAN_ROLE_ID).catch(() => null);
-
-                if (civilianRole) await member.roles.add(civilianRole);
-                if (unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
-                    await member.roles.remove(unverifiedRole);
-                }
-
-                return interaction.editReply({ 
-                    content: '✅ Verification successful.\n\nYou now have access to the server.' 
-                });
-
-            } catch (error) {
-                console.error('Verification System Error:', error);
-                return interaction.editReply({ 
-                    content: '❌ Verification partially failed. Ensure the bot\'s role is higher than the target roles and it has permission to change your nickname.' 
-                });
-            }
         }
     }
 });
