@@ -1,421 +1,288 @@
-const {
-    Client,
-    GatewayIntentBits,
+const { 
+    Client, 
+    GatewayIntentBits, 
+    PermissionFlagsBits, 
+    EmbedBuilder, 
+    ActionRowBuilder, 
+    ButtonBuilder, 
+    ButtonStyle, 
+    ModalBuilder, 
+    TextInputBuilder, 
+    TextInputStyle,
     REST,
     Routes,
-    SlashCommandBuilder,
-    PermissionsBitField
-} = require("discord.js");
+    ApplicationCommandOptionType
+} = require('discord.js');
+require('dotenv').config();
 
-const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
+// 1. Configuration Check
+const config = {
+    TOKEN: process.env.TOKEN,
+    CLIENT_ID: process.env.CLIENT_ID,
+    GUILD_ID: process.env.GUILD_ID,
+    ANNOUNCEMENT_CHANNEL_ID: process.env.ANNOUNCEMENT_CHANNEL_ID,
+    UNVERIFIED_ROLE_ID: process.env.VERIFY_ROLE_ID, // Maps to Unverified role
+    CIVILIAN_ROLE_ID: process.env.CIVILIAN_ROLE_ID
+};
 
+// Ensure all environment variables exist
+for (const [key, value] of Object.entries(config)) {
+    if (!value) {
+        console.error(`❌ CRITICAL ERROR: Environment variable "${key}" is missing.`);
+        process.exit(1);
+    }
+}
+
+// 2. Client Initialization
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds]
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessages
+    ]
 });
 
-// ---------------- COMMANDS ----------------
-
+// 3. Slash Command Definitions
 const commands = [
-    new SlashCommandBuilder()
-        .setName("startsession")
-        .setDescription("Start a roleplay session"),
+    {
+        name: 'startsession',
+        description: 'Starts a South Wales RP session',
+        default_member_permissions: PermissionFlagsBits.Administrator.toString()
+    },
+    {
+        name: 'endsession',
+        description: 'Ends the active South Wales RP session',
+        default_member_permissions: PermissionFlagsBits.Administrator.toString()
+    },
+    {
+        name: 'announce',
+        description: 'Sends a professional server announcement',
+        default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+        options: [
+            {
+                name: 'title',
+                description: 'The title of your announcement',
+                type: ApplicationCommandOptionType.String,
+                required: true
+            },
+            {
+                name: 'message',
+                description: 'The content of your announcement',
+                type: ApplicationCommandOptionType.String,
+                required: true
+            },
+            {
+                name: 'image',
+                description: 'Optional image attachment',
+                type: ApplicationCommandOptionType.Attachment,
+                required: false
+            }
+        ]
+    },
+    {
+        name: 'setverify',
+        description: 'Spawns the verification panel in this channel',
+        default_member_permissions: PermissionFlagsBits.Administrator.toString()
+    }
+];
 
-    new SlashCommandBuilder()
-        .setName("endsession")
-        .setDescription("End a roleplay session"),
+// 4. Register Slash Commands (REST Deployment)
+const rest = new REST({ version: '10' }).setToken(config.TOKEN);
 
-    new SlashCommandBuilder()
-        .setName("announce")
-        .setDescription("Send a server announcement")
-        .addStringOption(option =>
-            option.setName("message")
-                .setDescription("Announcement message")
-                .setRequired(true)
-        )
-].map(cmd => cmd.toJSON());
-
-const rest = new REST({ version: "10" }).setToken(TOKEN);
-
-// ---------------- REGISTER COMMANDS ----------------
-
-client.once("ready", async () => {
-    console.log(`Logged in as ${client.user.tag}`);
-
+(async () => {
     try {
+        console.log('🔄 Started refreshing application (/) commands...');
         await rest.put(
-            Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+            Routes.applicationGuildCommands(config.CLIENT_ID, config.GUILD_ID),
             { body: commands }
         );
-
-        console.log("Slash commands registered");
-    } catch (err) {
-        console.error(err);
+        console.log('✅ Successfully reloaded application (/) commands.');
+    } catch (error) {
+        console.error('❌ Error registering slash commands:', error);
     }
+})();
+
+// 5. Bot Events
+client.once('ready', () => {
+    console.log(`🚀 Logged in as ${client.user.tag}! Bot is ready 24/7.`);
+    client.user.setActivity('South Wales RP', { type: 3 }); // Watching activity
 });
 
-// ---------------- INTERACTIONS ----------------
-
-client.on("interactionCreate", async interaction => {
-    if (!interaction.isChatInputCommand()) return;
-
-    const isAdmin =
-        interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator);
-
-    // ---------------- START SESSION ----------------
-    if (interaction.commandName === "startsession") {
-        if (!isAdmin) {
-            return interaction.reply({ content: "No permission.", ephemeral: true });
-        }
-
-        return interaction.reply(
-`🟢 **SOUTH WALES RP SESSION STARTED**
-
-A roleplay session is now officially active.
-
-━━━━━━━━━━━━━━━━━━
-✅ Staff Online
-🚓 Police Active
-🚑 EMS Active
-👥 Civilians Allowed
-━━━━━━━━━━━━━━━━━━
-
-Please follow all server rules and enjoy roleplay.`
-        );
-    }
-
-    // ---------------- END SESSION ----------------
-    if (interaction.commandName === "endsession") {
-        if (!isAdmin) {
-            return interaction.reply({ content: "No permission.", ephemeral: true });
-        }
-
-        return interaction.reply(
-`🔴 **SOUTH WALES RP SESSION ENDED**
-
-The roleplay session has now ended.
-
-━━━━━━━━━━━━━━━━━━
-📌 RP is now closed
-🚓 Emergency services off duty
-👮 Staff monitoring reduced
-━━━━━━━━━━━━━━━━━━
-
-Thank you for participating.`
-        );
-    }
-
-    // ---------------- ANNOUNCE ----------------
-    if (interaction.commandName === "announce") {
-        if (!isAdmin) {
-            return interaction.reply({ content: "No permission.", ephemeral: true });
-        }
-
-        const msg = interaction.options.getString("message");
-
-        return interaction.reply(
-`📢 **ANNOUNCEMENT**
-
-${msg}
-
-— Staff Team`
-        );
-    }
-});
-
-// ---------------- LOGIN ----------------
-client.login(TOKEN);].map(cmd => cmd.toJSON());
-
-// Register commands
-const rest = new REST({ version: '10' }).setToken(TOKEN);
-
-client.once('ready', async () => {
-    console.log(`Logged in as ${client.user.tag}`);
-
+// Automatic Role Assignment on Join
+client.on('guildMemberAdd', async (member) => {
     try {
-        await rest.put(
-            Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-            { body: commands }
-        );
-        console.log("Commands registered");
-    } catch (err) {
-        console.error(err);
+        const unverifiedRole = await member.guild.roles.fetch(config.UNVERIFIED_ROLE_ID);
+        if (unverifiedRole) {
+            await member.roles.add(unverifiedRole);
+            console.log(`assigned Unverified role to ${member.user.tag}`);
+        }
+    } catch (error) {
+        console.error(`Failed to assign unverified role to joining member ${member.user.tag}:`, error);
     }
 });
 
-// ---------------- COMMAND HANDLER ----------------
-
-client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
-
-    // ---------------- START SESSION ----------------
-    if (interaction.commandName === 'startsession') {
-
-        if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
-            return interaction.reply({ content: "No permission.", ephemeral: true });
-        }
-
-        const channel = interaction.guild.channels.cache.find(c => c.name === "verify");
-
-        if (channel) {
-            channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
-                SendMessages: false
-            });
-        }
-
-        return interaction.reply(
-`🟢 **SOUTH WALES RP SESSION STARTED**
-
-A roleplay session is now officially active. Please ensure you follow all server rules and maintain realistic roleplay at all times.
-
-━━━━━━━━━━━━━━━━━━
-✅ Active Staff Monitoring
-🚓 Emergency Services Available
-👮 Law Enforcement On Duty
-🏥 Medical Services Active
-🚗 Civilian RP Fully Open
-━━━━━━━━━━━━━━━━━━
-
-Have fun and enjoy your time in South Wales RP!`
-        );
-    }
-
-    // ---------------- END SESSION ----------------
-    if (interaction.commandName === 'endsession') {
-
-        if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
-            return interaction.reply({ content: "No permission.", ephemeral: true });
-        }
-
-        return interaction.reply(
-`🔴 **SOUTH WALES RP SESSION ENDED**
-
-The current roleplay session has now officially ended.
-
-━━━━━━━━━━━━━━━━━━
-📌 All RP activities are now closed
-🚓 Emergency services are off duty
-👮 Staff are no longer actively moderating RP
-🚗 Civilian operations paused
-━━━━━━━━━━━━━━━━━━
-
-Thank you to everyone who participated today.
-We hope to see you in the next session.`
-        );
-    }
-
-    // ---------------- ANNOUNCEMENT ----------------
-    if (interaction.commandName === 'announce') {
-
-        if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
-            return interaction.reply({ content: "No permission.", ephemeral: true });
-        }
-
-        const msg = interaction.options.getString('message');
-
-        const channel = interaction.guild.channels.cache.find(c => c.name === "announcements");
-
-        const text = `📢 **SOUTH WALES RP ANNOUNCEMENT**\n\n${msg}\n\n— Staff Team`;
-
-        if (channel) {
-            channel.send(text);
-        }
-
-        return interaction.reply({ content: "Announcement sent ✅", ephemeral: true });
-    }
-});
-
-// ---------------- LOGIN ----------------
-client.login(TOKEN);            .setColor("Blue");
-
-        message.channel.send({ embeds: [embed], components: [button] });
-    }
-
-    // ANNOUNCEMENTS
-    if (message.content.startsWith("!announce")) {
-        if (!message.member.roles.cache.has(STAFF_ROLE_ID)) return;
-
-        const msg = message.content.slice(10);
-
-        const channel = await client.channels.fetch(ANNOUNCE_CHANNEL_ID);
-
-        const embed = new EmbedBuilder()
-            .setTitle("📢 Announcement")
-            .setDescription(msg)
-            .setColor("Red");
-
-        channel.send({ embeds: [embed] });
-    }
-
-    // START SESSION
-    if (message.content === "!startsession") {
-        if (!message.member.roles.cache.has(STAFF_ROLE_ID)) return;
-
-        const channel = message.channel;
-
-        const embed = new EmbedBuilder()
-            .setTitle("SOUTH WALES RP SESSION STARTED")
-            .setDescription("A roleplay session is now active.\n\n✅ Active Staff\n✅ Professional RP\n✅ Emergency Services Available\n✅ Civilian Opportunities")
-            .setColor("Green");
-
-        channel.send({ embeds: [embed] });
-    }
-
-    // END SESSION
-    if (message.content === "!endsession") {
-        if (!message.member.roles.cache.has(STAFF_ROLE_ID)) return;
-
-        const channel = message.channel;
-
-        const embed = new EmbedBuilder()
-            .setTitle("🔴 SOUTH WALES RP SESSION ENDED")
-            .setDescription("The roleplay session has ended.\nThank you for participating.")
-            .setColor("Red");
-
-        channel.send({ embeds: [embed] });
-    }
-});
-
-// ---------------- BUTTON HANDLER ----------------
-client.on("interactionCreate", async (interaction) => {
-    if (!interaction.isButton()) return;
-
-    if (interaction.customId === "verify") {
-        const member = interaction.member;
-
-        await member.roles.add(CIVILIAN_ROLE_ID);
-
-        await interaction.reply({
-            content: "✅ You are now verified!",
-            ephemeral: true
-        });
-    }
-});
-
-client.login(TOKEN);        )
-].map(c => c.toJSON());
-
-// ================= REGISTER COMMANDS =================
-
-const rest = new REST({ version: '10' }).setToken(TOKEN);
-
-client.once('ready', async () => {
-    console.log(`Logged in as ${client.user.tag}`);
-
-    await rest.put(
-        Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-        { body: commands }
-    );
-
-    console.log("Slash commands registered");
-});
-
-// ================= COMMAND HANDLER =================
-
+// Interaction Handling (Commands, Buttons, Modals)
 client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
+    // ---- Handle Slash Commands ----
+    if (interaction.isChatInputCommand()) {
+        const { commandName, guild, channel } = interaction;
+        const announcementChannel = guild.channels.cache.get(config.ANNOUNCEMENT_CHANNEL_ID);
 
-    // OPTIONAL: admin only
-    const isAdmin = interaction.memberPermissions?.has(
-        PermissionsBitField.Flags.Administrator
-    );
+        try {
+            if (commandName === 'startsession') {
+                if (!announcementChannel) return interaction.reply({ content: '❌ Announcement channel not found.', ephemeral: true });
+                
+                const embed = new EmbedBuilder()
+                    .setTitle('🔵 SOUTH WALES RP SESSION STARTED')
+                    .setDescription(
+                        'A roleplay session is now active.\n\n' +
+                        'Please follow all server rules and maintain realistic roleplay.\n\n' +
+                        '✅ **Active Staff**\n\n' +
+                        '✅ **Professional RP**\n\n' +
+                        '✅ **Emergency Services Available**\n\n' +
+                        '✅ **Civilian Opportunities**\n\n' +
+                        'Enjoy your time in South Wales RP.'
+                    )
+                    .setColor('#0000FF') // Blue
+                    .setTimestamp();
 
-    // ================= START SESSION =================
-    if (interaction.commandName === 'startsession') {
-        if (!isAdmin)
-            return interaction.reply({ content: "No permission.", ephemeral: true });
+                await announcementChannel.send({ content: '@everyone', embeds: [embed] });
+                return interaction.reply({ content: '✅ Session startup posted successfully!', ephemeral: true });
+            }
 
-        const embed = new EmbedBuilder()
-            .setTitle("🟢 SOUTH WALES RP SESSION STARTED")
-            .setDescription(
-                "A roleplay session is now active.\n\n" +
-                "Please follow all server rules and maintain realistic roleplay.\n\n" +
-                "✅ Active Staff\n" +
-                "🚓 Emergency Services Available\n" +
-                "🚗 Civilian Opportunities\n\n" +
-                "Enjoy your time in South Wales RP."
-            )
-            .setColor(0x00ff00)
-            .setFooter({ text: "South Wales RP Bot" })
-            .setTimestamp();
+            if (commandName === 'endsession') {
+                if (!announcementChannel) return interaction.reply({ content: '❌ Announcement channel not found.', ephemeral: true });
 
-        return interaction.reply({ embeds: [embed] });
+                const embed = new EmbedBuilder()
+                    .setTitle('🔴 SOUTH WALES RP SESSION ENDED')
+                    .setDescription(
+                        'The current roleplay session has ended.\n\n' +
+                        'Thank you to everyone who attended.\n\n' +
+                        'We appreciate your support and hope to see you next time.'
+                    )
+                    .setColor('#FF0000') // Red
+                    .setTimestamp();
+
+                await announcementChannel.send({ content: '@everyone', embeds: [embed] });
+                return interaction.reply({ content: '✅ Session end posted successfully!', ephemeral: true });
+            }
+
+            if (commandName === 'announce') {
+                if (!announcementChannel) return interaction.reply({ content: '❌ Announcement channel not found.', ephemeral: true });
+
+                const title = interaction.options.getString('title');
+                const message = interaction.options.getString('message');
+                const image = interaction.options.getAttachment('image');
+
+                const embed = new EmbedBuilder()
+                    .setTitle(title)
+                    .setDescription(message)
+                    .setColor('#0000FF') // Blue
+                    .setTimestamp();
+
+                if (image) {
+                    embed.setImage(image.url);
+                }
+
+                await announcementChannel.send({ content: '@everyone', embeds: [embed] });
+                return interaction.reply({ content: '✅ Announcement broadcasted!', ephemeral: true });
+            }
+
+            if (commandName === 'setverify') {
+                const embed = new EmbedBuilder()
+                    .setTitle('✅ Verification Required')
+                    .setDescription('Welcome to South Wales RP.\n\nTo access the server, click Verify below and enter your Roblox username.')
+                    .setColor('#00FF00'); // Green
+
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('verify_btn')
+                        .setLabel('Verify')
+                        .setStyle(ButtonStyle.Success)
+                );
+
+                await channel.send({ embeds: [embed], components: [row] });
+                return interaction.reply({ content: '✅ Verification panel setup complete!', ephemeral: true });
+            }
+
+        } catch (error) {
+            console.error(`Error processing command ${commandName}:`, error);
+            return interaction.reply({ content: '❌ An error occurred executing this command.', ephemeral: true }).catch(() => {});
+        }
     }
 
-    // ================= END SESSION =================
-    if (interaction.commandName === 'endsession') {
-        if (!isAdmin)
-            return interaction.reply({ content: "No permission.", ephemeral: true });
+    // ---- Handle Button Click ----
+    if (interaction.isButton()) {
+        if (interaction.customId === 'verify_btn') {
+            const modal = new ModalBuilder()
+                .setCustomId('verify_modal')
+                .setTitle('Roblox Verification');
 
-        const embed = new EmbedBuilder()
-            .setTitle("🔴 SOUTH WALES RP SESSION ENDED")
-            .setDescription(
-                "The current roleplay session has ended.\n\n" +
-                "Thank you to everyone who attended.\n" +
-                "We appreciate your support and hope to see you next time."
-            )
-            .setColor(0xff0000)
-            .setFooter({ text: "South Wales RP Bot" })
-            .setTimestamp();
+            const robloxInput = new TextInputBuilder()
+                .setCustomId('roblox_username')
+                .setLabel('Roblox Username')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('Enter your exact username here')
+                .setRequired(true);
 
-        return interaction.reply({ embeds: [embed] });
+            const row = new ActionRowBuilder().addComponents(robloxInput);
+            modal.addComponents(row);
+
+            await interaction.showModal(modal);
+        }
     }
 
-    // ================= CUSTOM MESSAGE =================
-    if (interaction.commandName === 'message') {
-        if (!isAdmin)
-            return interaction.reply({ content: "No permission.", ephemeral: true });
+    // ---- Handle Modal Submission ----
+    if (interaction.isModalSubmit()) {
+        if (interaction.customId === 'verify_modal') {
+            await interaction.deferReply({ ephemeral: true });
 
-        const text = interaction.options.getString('text');
+            const robloxUsername = interaction.fields.getTextInputValue('roblox_username');
+            const member = interaction.member;
+            const discordName = member.user.username;
 
-        const embed = new EmbedBuilder()
-            .setTitle("📢 SOUTH WALES RP ANNOUNCEMENT")
-            .setDescription(text)
-            .setColor(0x3498db)
-            .setFooter({ text: "South Wales RP Bot" })
-            .setTimestamp();
+            try {
+                // Update Member Nickname (DiscordName - RobloxUsername)
+                // Note: Will fail if targeting server Owner or someone with higher permissions
+                const targetNickname = `${discordName} - ${robloxUsername}`;
+                await member.setNickname(targetNickname.substring(0, 32)); // Discord limits nicknames to 32 chars
 
-        return interaction.reply({ embeds: [embed] });
+                // Manage Roles
+                const unverifiedRole = guildRole(interaction.guild, config.UNVERIFIED_ROLE_ID);
+                const civilianRole = guildRole(interaction.guild, config.CIVILIAN_ROLE_ID);
+
+                if (civilianRole) await member.roles.add(civilianRole);
+                if (unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
+                    await member.roles.remove(unverifiedRole);
+                }
+
+                return interaction.editReply({ 
+                    content: '✅ Verification successful.\n\nYou now have access to the server.' 
+                });
+
+            } catch (error) {
+                console.error('Verification System Error:', error);
+                return interaction.editReply({ 
+                    content: '❌ Verification partially failed. Ensure the bot\'s role is higher than the target roles and it has permission to change your nickname.' 
+                });
+            }
+        }
     }
 });
 
-// ================= LOGIN =================
-client.login(TOKEN);    }
+// Helper function to safely fetch roles
+function guildRole(guild, roleId) {
+    return guild.roles.cache.get(roleId);
+}
+
+// Global error handlers to keep the bot up 24/7
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
-// ---------------- COMMAND HANDLER ----------------
-
-client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
-
-    // START SESSION
-    if (interaction.commandName === 'startsession') {
-
-        if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
-            return interaction.reply({ content: "No permission.", ephemeral: true });
-        }
-
-        const channel = interaction.guild.channels.cache.find(c => c.name === "verify");
-        if (channel) {
-            channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
-                SendMessages: false
-            });
-        }
-
-        return interaction.reply("Session started ✅");
-    }
-
-    // END SESSION
-    if (interaction.commandName === 'endsession') {
-
-        if (!interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator)) {
-            return interaction.reply({ content: "No permission.", ephemeral: true });
-        }
-
-        return interaction.reply("Session ended ✅");
-    }
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception thrown:', err);
 });
 
-// LOGIN (IMPORTANT — NOTHING AFTER THIS LINE)
-client.login(TOKEN);
+// 6. Bot Login
+client.login(config.TOKEN);
