@@ -121,7 +121,7 @@ client.once('ready', () => {
 // Auto Role Assignment on Join
 client.on('guildMemberAdd', async (member) => {
     try {
-        const unverifiedRole = await member.guild.roles.fetch(config.UNVERIFIED_ROLE_ID);
+        const unverifiedRole = await member.guild.roles.fetch(config.UNVERIFIED_ROLE_ID).catch(() => null);
         if (unverifiedRole) {
             await member.roles.add(unverifiedRole);
             console.log(`Assigned Unverified role to ${member.user.tag}`);
@@ -145,6 +145,7 @@ client.on('interactionCreate', async (interaction) => {
         return;
     }
 
+    // Direct active fetching instead of just looking at the quick cache
     const currentGuild = interaction.guild || await client.guilds.fetch(interaction.guildId).catch(() => null);
     if (!currentGuild) {
         if (interaction.isRepliable()) {
@@ -156,11 +157,13 @@ client.on('interactionCreate', async (interaction) => {
     // ---- Handle Slash Commands ----
     if (interaction.isChatInputCommand()) {
         const { commandName, channel } = interaction;
-        const announcementChannel = currentGuild.channels.cache.get(config.ANNOUNCEMENT_CHANNEL_ID);
+        
+        // Active fetch for the announcement channel to completely skip cache errors
+        const announcementChannel = await currentGuild.channels.fetch(config.ANNOUNCEMENT_CHANNEL_ID).catch(() => null);
 
         try {
             if (commandName === 'startsession') {
-                if (!announcementChannel) return interaction.reply({ content: '❌ Announcement channel not found.', ephemeral: true });
+                if (!announcementChannel) return interaction.reply({ content: '❌ Announcement channel not found. Double check your ANNOUNCEMENT_CHANNEL_ID on Render!', ephemeral: true });
                 
                 const embed = new EmbedBuilder()
                     .setTitle('🔵 SOUTH WALES RP SESSION STARTED')
@@ -181,7 +184,7 @@ client.on('interactionCreate', async (interaction) => {
             }
 
             if (commandName === 'endsession') {
-                if (!announcementChannel) return interaction.reply({ content: '❌ Announcement channel not found.', ephemeral: true });
+                if (!announcementChannel) return interaction.reply({ content: '❌ Announcement channel not found. Double check your ANNOUNCEMENT_CHANNEL_ID on Render!', ephemeral: true });
 
                 const embed = new EmbedBuilder()
                     .setTitle('🔴 SOUTH WALES RP SESSION ENDED')
@@ -198,7 +201,7 @@ client.on('interactionCreate', async (interaction) => {
             }
 
             if (commandName === 'announce') {
-                if (!announcementChannel) return interaction.reply({ content: '❌ Announcement channel not found.', ephemeral: true });
+                if (!announcementChannel) return interaction.reply({ content: '❌ Announcement channel not found. Double check your ANNOUNCEMENT_CHANNEL_ID on Render!', ephemeral: true });
 
                 const title = interaction.options.getString('title');
                 const message = interaction.options.getString('message');
@@ -275,8 +278,8 @@ client.on('interactionCreate', async (interaction) => {
                 const targetNickname = `${discordName} - ${robloxUsername}`;
                 await member.setNickname(targetNickname.substring(0, 32));
 
-                const unverifiedRole = currentGuild.roles.cache.get(config.UNVERIFIED_ROLE_ID);
-                const civilianRole = currentGuild.roles.cache.get(config.CIVILIAN_ROLE_ID);
+                const unverifiedRole = await currentGuild.roles.fetch(config.UNVERIFIED_ROLE_ID).catch(() => null);
+                const civilianRole = await currentGuild.roles.fetch(config.CIVILIAN_ROLE_ID).catch(() => null);
 
                 if (civilianRole) await member.roles.add(civilianRole);
                 if (unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
@@ -306,4 +309,4 @@ process.on('uncaughtException', (err) => {
     console.error('Uncaught Exception thrown:', err);
 });
 
-client.login(config.TOKEN);x
+client.login(config.TOKEN);
