@@ -1,9 +1,13 @@
 {
   "name": "south-wales-rp-bot",
   "version": "1.0.0",
+  "description": "Discord bot for South Wales RP",
   "main": "bot.js",
-  "type": "commonjs",
+  "scripts": {
+    "start": "node bot.js"
+  },
   "dependencies": {
-    "discord.js": "^14.0.0"
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.5"
   }
 }
