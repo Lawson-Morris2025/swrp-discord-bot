@@ -27,16 +27,17 @@ app.use(express.json());
 
 // Main Configuration Object
 const CONFIG = {
-    TOKEN: 'YOUR_BOT_TOKEN_HERE',
-    PORT: 3000,
-    PURPLE_HEX: '#7B2CBF', // Clean royal purple accent color
+    // Reads directly from your Render environment configuration
+    TOKEN: process.env.TOKEN || 'YOUR_BOT_TOKEN_HERE',
+    PORT: process.env.PORT || 3000,
+    PURPLE_HEX: '#7B2CBF', // Welsh royal purple dashboard accent theme
     CHANNELS: {
         ANNOUNCEMENTS: 'YOUR_ANNOUNCEMENTS_CHANNEL_ID',
         TICKET_LOGS: 'YOUR_TICKET_LOGS_CHANNEL_ID',
         MOD_LOGS: 'YOUR_MOD_LOGS_CHANNEL_ID',
         CATEGORY_TICKETS: 'YOUR_TICKETS_CATEGORY_ID'
     },
-    // Dynamically managed ticket categories (You can add or remove items here safely)
+    // Dynamically managed support panel arrays (Add or remove modules safely here)
     TICKET_TYPES: [
         { id: 'support', label: 'General Support', emoji: '🎫' },
         { id: 'player_report', label: 'Player Report', emoji: '⚠️' },
@@ -55,9 +56,8 @@ function sendSessionAnnouncement(type, customText = null, imageUrl = null) {
 
     if (type === 'START') {
         embed
-            .setTitle('🏴󠁧󠁢󠁷󠁬󠁳󠁿 SOUTH WALES RP SESSION STARTED 🏴󠁧󠁢󠁷󠁬󠁳󠁿')
+            .setTitle('A roleplay session is now active. Please follow all server rules and maintain realistic roleplay.')
             .setDescription(
-                'A roleplay session is now active. Please follow all server rules and maintain realistic roleplay.\n\n' +
                 '🔹 **Active Staff On Duty**\n' +
                 '🔹 **Professional RP Expected**\n' +
                 '🔹 **Emergency Services Available**\n' +
@@ -66,14 +66,11 @@ function sendSessionAnnouncement(type, customText = null, imageUrl = null) {
             );
     } else if (type === 'END') {
         embed
-            .setTitle('🏴󠁧󠁢󠁷󠁬󠁳󠁿 SOUTH WALES RP SESSION ENDED 🏴󠁧󠁢󠁷󠁬󠁳󠁿')
-            .setDescription(
-                'The current roleplay session has ended. Thank you to everyone who attended.\n\n' +
-                'We appreciate your support and hope to see you next time.'
-            );
+            .setTitle('The current roleplay session has ended. Thank you to everyone who attended.')
+            .setDescription('We appreciate your support and hope to see you next time.');
     } else if (type === 'CUSTOM') {
         embed
-            .setTitle('🏴󠁧󠁢󠁷󠁬󠁳󠁿 SOUTH WALES RP ANNOUNCEMENT 🏴󠁧󠁢󠁷󠁬󠁳󠁿')
+            .setTitle('South Wales RP | Community Announcement')
             .setDescription(customText);
         
         if (imageUrl) {
@@ -81,25 +78,29 @@ function sendSessionAnnouncement(type, customText = null, imageUrl = null) {
         }
     }
 
-    channel.send({ embeds: [embed] });
+    // Sends a clean message with the raw title text exactly like the reference format
+    channel.send({ 
+        content: type === 'START' ? '**SOUTH WALES RP SESSION STARTED**' : type === 'END' ? '**SOUTH WALES RP SESSION ENDED**' : null, 
+        embeds: [embed] 
+    });
     return true;
 }
 
 // ==========================================
-// 3. DYNAMIC TICKET PANEL
+// 3. MODULAR TICKET PANEL
 // ==========================================
 async function deployTicketPanel(channelId) {
     const channel = client.channels.cache.get(channelId);
-    if (!channel) return console.log('Ticket channel not found.');
+    if (!channel) return console.log('Target ticket log channel trace broken.');
 
     const embed = new EmbedBuilder()
         .setColor(CONFIG.PURPLE_HEX)
-        .setTitle('South Wales RP | Support Terminal')
-        .setDescription('Select the appropriate department below to open a private support ticket with our team.');
+        .setTitle('South Wales RP | Support Hub')
+        .setDescription('Need assistance? Click one of the buttons below to open a direct support ticket with our server moderators.');
 
     const row = new ActionRowBuilder();
     
-    // Loops through the dynamic array so you can add/remove buttons instantly
+    // Loops dynamically through your custom configuration setup array
     CONFIG.TICKET_TYPES.forEach(ticket => {
         row.addComponents(
             new ButtonBuilder()
@@ -113,11 +114,10 @@ async function deployTicketPanel(channelId) {
     await channel.send({ embeds: [embed], components: [row] });
 }
 
-// Handle Ticket Generation Interactive Logic
+// Process Ticket Button Hits
 async function handleTicketInteraction(interaction) {
     if (!interaction.isButton()) return;
 
-    // Check if button belongs to the dynamic ticket types
     const ticketType = CONFIG.TICKET_TYPES.find(t => `ticket_${t.id}` === interaction.customId);
     if (!ticketType) return;
 
@@ -126,7 +126,7 @@ async function handleTicketInteraction(interaction) {
     const guild = interaction.guild;
     const channelName = `${ticketType.id}-${interaction.user.username}`.toLowerCase();
 
-    // Spawn the private text channel under the configured category
+    // Generate isolated staff text space
     const ticketChannel = await guild.channels.create({
         name: channelName,
         type: ChannelType.GuildText,
@@ -140,14 +140,13 @@ async function handleTicketInteraction(interaction) {
                 id: interaction.user.id,
                 allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles],
             },
-            // Give staff permissions implicitly here if required
         ],
     });
 
     const ticketEmbed = new EmbedBuilder()
         .setColor(CONFIG.PURPLE_HEX)
-        .setTitle(`Ticket: ${ticketType.label}`)
-        .setDescription(`Welcome ${interaction.user}. Staff have been alerted. Please outline your issue or request below layout clearly.`);
+        .setTitle(`Support Room: ${ticketType.label}`)
+        .setDescription(`Welcome ${interaction.user}. A member of our staff team will be with you shortly. Please explain your situation in detail below.`);
 
     const closeRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -162,10 +161,10 @@ async function handleTicketInteraction(interaction) {
 }
 
 // ==========================================
-// 4. MODDING CENTRE (Core Actions)
+// 4. MODDING CENTRE (Core Management Actions)
 // ==========================================
 async function executeModAction(actionType, targetUserId, reason, executorTag) {
-    const guild = client.guilds.cache.first(); // Grab primary guild context
+    const guild = client.guilds.cache.first();
     if (!guild) return false;
 
     try {
@@ -175,13 +174,13 @@ async function executeModAction(actionType, targetUserId, reason, executorTag) {
         const logChannel = client.channels.cache.get(CONFIG.CHANNELS.MOD_LOGS);
         const logEmbed = new EmbedBuilder()
             .setColor(CONFIG.PURPLE_HEX)
-            .setTitle(`Modding Centre | Action Execution`)
+            .setTitle(`Modding Centre Logs`)
             .setTimestamp()
             .addFields(
-                { name: 'Target User', value: `${member.user.tag} (${targetUserId})`, inline: true },
-                { name: 'Action Taken', value: actionType.toUpperCase(), inline: true },
-                { name: 'Authorized By', value: executorTag, inline: true },
-                { name: 'Reason', value: reason || 'No specific reason given.' }
+                { name: 'User Actioned', value: `${member.user.tag} (${targetUserId})`, inline: true },
+                { name: 'Mod Action Type', value: actionType.toUpperCase(), inline: true },
+                { name: 'Authorized Staff', value: executorTag, inline: true },
+                { name: 'Reason Given', value: reason || 'No details provided.' }
             );
 
         if (actionType === 'kick') {
@@ -189,73 +188,65 @@ async function executeModAction(actionType, targetUserId, reason, executorTag) {
         } else if (actionType === 'ban') {
             await member.ban({ reason: reason });
         } else if (actionType === 'warn') {
-            // Send direct message warning cleanly
-            await member.send({ content: `⚠️ **South Wales RP Warning**\nYou have been issued a formal warning for: *${reason}*` }).catch(() => null);
+            await member.send({ content: `⚠️ **South Wales RP Notice**\nYour account has been formally warned for: *${reason}*` }).catch(() => null);
         }
 
         if (logChannel) logChannel.send({ embeds: [logEmbed] });
         return true;
     } catch (err) {
-        console.error('Error executing mod action:', err);
+        console.error('Modding action processing failure:', err);
         return false;
     }
 }
 
 // ==========================================
-// 5. WEB DASHBOARD INTEGRATION API (REST)
+// 5. WEB DASHBOARD ENDPOINTS (REST API)
 // ==========================================
-// Trigger session start script externally
 app.post('/api/announcements/start', (req, res) => {
     const success = sendSessionAnnouncement('START');
-    return success ? res.json({ success: true }) : res.status(500).json({ error: 'Failed to broadcast' });
+    return success ? res.json({ success: true }) : res.status(500).json({ error: 'Broadcast pipeline error' });
 });
 
-// Trigger session end script externally
 app.post('/api/announcements/end', (req, res) => {
     const success = sendSessionAnnouncement('END');
-    return success ? res.json({ success: true }) : res.status(500).json({ error: 'Failed to broadcast' });
+    return success ? res.json({ success: true }) : res.status(500).json({ error: 'Broadcast pipeline error' });
 });
 
-// Trigger custom announcement containing image option properties
 app.post('/api/announcements/custom', (req, res) => {
     const { message, imageUrl } = req.body;
-    if (!message) return res.status(400).json({ error: 'Message body required' });
+    if (!message) return res.status(400).json({ error: 'Message body content required' });
     
     const success = sendSessionAnnouncement('CUSTOM', message, imageUrl);
-    return success ? res.json({ success: true }) : res.status(500).json({ error: 'Failed to broadcast' });
+    return success ? res.json({ success: true }) : res.status(500).json({ error: 'Broadcast pipeline error' });
 });
 
-// Endpoint to execute tools in the Modding Centre remotely
 app.post('/api/modding/execute', async (req, res) => {
     const { action, userId, reason, executor } = req.body;
-    if (!action || !userId) return res.status(400).json({ error: 'Missing core attributes' });
+    if (!action || !userId) return res.status(400).json({ error: 'Missing target parameters' });
 
-    const result = await executeModAction(action, userId, reason, executor || 'Web Control Panel');
-    return result ? res.json({ success: true }) : res.status(500).json({ error: 'Action execution failed' });
+    const result = await executeModAction(action, userId, reason, executor || 'Modding Centre Web Panel');
+    return result ? res.json({ success: true }) : res.status(500).json({ error: 'Failed to complete moderation task' });
 });
 
 // ==========================================
-// 6. EVENT HANDLERS & BOT RUNTIME
+// 6. LIFE CYCLE ROUTERS & LOGIN
 // ==========================================
 client.once('ready', () => {
-    console.log(`🤖 South Wales RP Bot online as ${client.user.tag}`);
+    console.log(`🤖 South Wales RP Bot successfully running as: ${client.user.tag}`);
     
-    // Start Express listener server for dashboard linkups
     app.listen(CONFIG.PORT, () => {
-        console.log(`🌐 Dashboard API tunnel open on port ${CONFIG.PORT}`);
+        console.log(`🌐 Modding Centre API processing traffic safely on port ${CONFIG.PORT}`);
     });
 });
 
 client.on('interactionCreate', async (interaction) => {
-    // Process main dynamic ticket selections
     if (interaction.isButton()) {
         if (interaction.customId.startsWith('ticket_')) {
             await handleTicketInteraction(interaction);
         }
         
-        // Handle Ticket closing logic clean closure
         if (interaction.customId === 'close_ticket') {
-            await interaction.reply({ content: 'Locking down ticket channel environment in 5 seconds...' });
+            await interaction.reply({ content: 'Closing channel workspace setup cleanly in 5 seconds...' });
             setTimeout(() => {
                 interaction.channel.delete().catch(() => null);
             }, 5000);
@@ -263,5 +254,4 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// Log the application instance layer online
 client.login(CONFIG.TOKEN);
