@@ -55,7 +55,7 @@ const CONFIG = {
     DASHBOARD_PASSWORD: process.env.DASHBOARD_PASSWORD || 'StaffPass123',
     FIXED_TICKET_CHANNEL_ID: '1512552819172053172',
     CHANNELS: {
-        ANNOUNCEMENTS: process.env.ANNOUNCEMENTS_CHANNEL_ID,
+        ANNOUNCEMENTS: '1512759729829580800', // Hardcoded directly to your server channel
         TICKET_LOGS: process.env.TICKET_LOG_CHANNEL_ID,
         MOD_LOGS: process.env.MOD_LOGS_CHANNEL_ID,
         CATEGORY_TICKETS: process.env.TICKET_CATEGORY_ID
@@ -283,7 +283,7 @@ app.get('/announcements', checkAuth, (req, res) => {
 app.post('/announcements/dispatch', checkAuth, upload.array('photos', 10), async (req, res) => {
     const { type, message } = req.body;
     
-    // Smart Fetch: Tries Cache first, falls back to live API fetch to prevent 'not found' issues
+    // Smart Fetch: Tries Cache first, falls back to direct live API fetch
     let channel = client.channels.cache.get(CONFIG.CHANNELS.ANNOUNCEMENTS);
     if (!channel) {
         try {
@@ -293,7 +293,7 @@ app.post('/announcements/dispatch', checkAuth, upload.array('photos', 10), async
         }
     }
 
-    if (!channel) return res.send("<script>alert('Announcements channel not found. Verify your Render Environment Variable layout.'); window.location='/announcements';</script>");
+    if (!channel) return res.send("<script>alert('Announcements channel could not be found by the bot.'); window.location='/announcements';</script>");
 
     const domainHost = req.get('host');
     const protocolScheme = req.protocol;
