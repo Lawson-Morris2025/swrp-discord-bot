@@ -170,21 +170,52 @@ app.get('/announcements', checkAuth, (req, res) => {
             
             <form method="POST" action="/announcements/dispatch">
                 <label style="font-weight: bold; display: block; margin-bottom: 5px;">Select Option Template</label>
-                <select name="type">
+                <select name="type" id="templateSelect" onchange="updatePreview()">
                     <option value="START">🟢 Broadcast: Start Session Template</option>
                     <option value="END">🔴 Broadcast: End Session Template</option>
-                    <option value="CUSTOM">💬 Broadcast: Custom Announcement (Uses text field below)</option>
+                    <option value="CUSTOM">💬 Broadcast: Custom Announcement (Uses text box below)</option>
                 </select>
 
-                <label style="font-weight: bold; display: block; margin-bottom: 5px;">Custom Announcement Message</label>
-                <textarea name="message" rows="4" placeholder="Type customized notices here..."></textarea>
+                <label style="font-weight: bold; display: block; margin-bottom: 5px;">Live Embed Preview (What the bot will post):</label>
+                <div id="previewBox" style="background: #F3E8FF; border: 1px dashed #7B2CBF; padding: 20px; border-radius: 8px; margin-bottom: 20px; font-family: monospace; white-space: pre-wrap; color: #2D3748;"></div>
 
-                <label style="font-weight: bold; display: block; margin-bottom: 5px;">Optional Photo URL Attachment</label>
-                <input type="text" name="imageUrl" placeholder="https://i.imgur.com/example.png" />
+                <div id="customInputs" style="display: none;">
+                    <label style="font-weight: bold; display: block; margin-bottom: 5px;">Custom Announcement Message</label>
+                    <textarea name="message" id="customMessage" rows="4" placeholder="Type customized notices here..." oninput="updatePreview()"></textarea>
+
+                    <label style="font-weight: bold; display: block; margin-bottom: 5px;">Optional Photo URL Attachment</label>
+                    <input type="text" name="imageUrl" placeholder="https://i.imgur.com/example.png" />
+                </div>
 
                 <button type="submit" class="btn">Send Announcement</button>
             </form>
         </div>
+
+        <script>
+            const startText = "🏴󠁧󠁢󠁷󠁬󠁳󠁿 **SOUTH WALES RP SESSION STARTED** 🏴󠁧󠁢󠁷󠁬󠁳󠁿\\n\\nA roleplay session is now active. Please follow all server rules and maintain realistic roleplay.\\n\\n🔹 **Active Staff On Duty**\\n🔹 **Professional RP Expected**\\n🔹 **Emergency Services Available**\\n🔹 **Civilian Opportunities Open**\\n\\nEnjoy your time in South Wales RP!";
+            const endText = "🏴󠁧󠁢󠁷󠁬󠁳󠁿 **SOUTH WALES RP SESSION ENDED** 🏴󠁧󠁢󠁷󠁬󠁳󠁿\\n\\nThe current roleplay session has ended. Thank you to everyone who attended.\\n\\nWe appreciate your support and hope to see you next time.";
+
+            function updatePreview() {
+                const select = document.getElementById('templateSelect');
+                const preview = document.getElementById('previewBox');
+                const customInputs = document.getElementById('customInputs');
+                const customMessage = document.getElementById('customMessage').value;
+
+                if (select.value === 'START') {
+                    preview.innerText = startText;
+                    customInputs.style.display = 'none';
+                } else if (select.value === 'END') {
+                    preview.innerText = endText;
+                    customInputs.style.display = 'none';
+                } else {
+                    preview.innerText = customMessage ? customMessage : "(Empty custom announcement text...)";
+                    customInputs.style.display = 'block';
+                }
+            }
+
+            // Run on page load to set initial text box layout values
+            updatePreview();
+        </script>
     `));
 });
 
