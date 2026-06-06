@@ -485,7 +485,7 @@ client.on('interactionCreate', async (interaction) => {
             const embed = new EmbedBuilder()
                 .setColor(CONFIG.PURPLE_HEX)
                 .setTitle('🏴󠁧󠁢󠁷󠁬󠁳󠁿 South Wales RP | Verification Portal')
-                .setDescription('Welcome! To gain full civilian access to the server, click the button below to link your Roblox username.\n\n**Note:** This instantly clears your **Unverified** status, updates your server name, and activates your **Civilian** role profile.');
+                .setDescription('Welcome! To gain full civilian access to the server, click the button below to link your Roblox username.\n\n**Note:** This instantly clears your **Unverified** status, updates your nickname to your Roblox account name, and activates your **Civilian** role profile.');
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
@@ -521,7 +521,7 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.showModal(modal);
     }
 
-    // Handle Modal Submission (Processes username, changes nickname, swaps roles)
+    // Handle Modal Submission (Processes username, updates nickname strictly to Roblox name, swaps roles)
     if (interaction.isModalSubmit() && interaction.customId === 'roblox_verify_modal') {
         await interaction.deferReply({ ephemeral: true });
         
@@ -538,27 +538,20 @@ client.on('interactionCreate', async (interaction) => {
         try {
             const member = await guild.members.fetch(user.id);
             
-            // Step 1: Format and change nickname to: DiscordName (RobloxUsername)
-            // Note: Max character limit for Discord nicknames is 32 characters
-            let formattedName = `${user.username} (${robloxUsername})`;
-            if (formattedName.length > 32) {
-                formattedName = formattedName.substring(0, 29) + '...';
-            }
-            
-            // Try updating nickname (will intentionally fail on server owners due to Discord limitations)
-            await member.setNickname(formattedName).catch(err => {
+            // Set the nickname strictly to their Roblox Username
+            await member.setNickname(robloxUsername).catch(err => {
                 console.warn(`Could not adjust nickname for ${user.username}. (Likely server owner or high admin hierarchy permissions)`);
             });
 
-            // Step 2: Remove unverified role if they have it
+            // Remove unverified role if they have it
             if (unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
                 await member.roles.remove(unverifiedRole);
             }
             
-            // Step 3: Add Civilian role
+            // Add Civilian role
             await member.roles.add(civilianRole);
             
-            return interaction.editReply({ content: `✅ Verification successful! Your profile name has been set to **${formattedName}** and your Civilian clearance is open.` });
+            return interaction.editReply({ content: `✅ Verification successful! Your profile nickname has been updated to **${robloxUsername}** and your Civilian clearance is open.` });
         } catch (err) {
             console.error(err);
             return interaction.editReply({ content: '❌ Role swap adjustment rejected. Ensure the bot role sits ABOVE both the "Unverified" and "Civilian" roles in your Server Settings role hierarchy.' });
@@ -567,7 +560,7 @@ client.on('interactionCreate', async (interaction) => {
 
     // Handle Support Ticket Buttons
     if (!interaction.isButton()) return;
-    const { guild, user, channel, customId } = interaction;
+    const { user, channel, customId } = interaction;
 
     if (customId.startsWith('ticket_')) {
         await interaction.deferReply({ ephemeral: true });
