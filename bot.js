@@ -29,30 +29,29 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
 
-// Configurations automatically link to your Render Environment settings
+// Configurations link to Render environment variables where needed
 const CONFIG = {
     TOKEN: process.env.TOKEN,
     PORT: process.env.PORT || 10000,
     PURPLE_HEX: '#7B2CBF', 
     DASHBOARD_PASSWORD: process.env.DASHBOARD_PASSWORD || 'StaffPass123',
+    FIXED_TICKET_CHANNEL_ID: '1512552819172053172', // Permanently bound channel
     CHANNELS: {
         ANNOUNCEMENTS: process.env.ANNOUNCEMENTS_CHANNEL_ID,
         TICKET_LOGS: process.env.TICKET_LOG_CHANNEL_ID,
         MOD_LOGS: process.env.MOD_LOGS_CHANNEL_ID,
         CATEGORY_TICKETS: process.env.TICKET_CATEGORY_ID
     },
-    // Dynamic modular buttons. You can add or drop objects here easily
     TICKET_TYPES: [
         { id: 'support', label: 'General Support', emoji: '🎫' },
         { id: 'player_report', label: 'Report a Player', emoji: '⚠️' }
     ]
 };
 
-// Internal transient data tracker for warns
 let globalWarns = []; 
 
 // ==========================================
-// 2. MIDDLEWARE & COMPREHENSIVE WEB STYLING
+// 2. MIDDLEWARE & AUTHENTICATION
 // ==========================================
 function checkAuth(req, res, next) {
     if (req.cookies.auth === CONFIG.DASHBOARD_PASSWORD) return next();
@@ -135,7 +134,7 @@ function buildPage(activeTab, contentBody) {
 }
 
 // ==========================================
-// 3. FRONTEND UI ROUTING WEB INTERFACES
+// 3. FRONTEND UI ROUTING & DASHBOARD INTERFACES
 // ==========================================
 app.post('/login', (req, res) => {
     if (req.body.password === CONFIG.DASHBOARD_PASSWORD) {
@@ -212,8 +211,6 @@ app.get('/announcements', checkAuth, (req, res) => {
                     customInputs.style.display = 'block';
                 }
             }
-
-            // Run on page load to set initial text box layout values
             updatePreview();
         </script>
     `));
@@ -222,7 +219,7 @@ app.get('/announcements', checkAuth, (req, res) => {
 app.post('/announcements/dispatch', checkAuth, async (req, res) => {
     const { type, message, imageUrl } = req.body;
     const channel = client.channels.cache.get(CONFIG.CHANNELS.ANNOUNCEMENTS);
-    if (!channel) return res.send("<script>alert('Channel not found. Verify Render environment variables.'); window.location='/announcements';</script>");
+    if (!channel) return res.send("<script>alert('Announcements channel not found.'); window.location='/announcements';</script>");
 
     const embed = new EmbedBuilder().setColor(CONFIG.PURPLE_HEX).setTimestamp();
 
@@ -247,19 +244,17 @@ app.get('/tickets', checkAuth, (req, res) => {
     res.send(buildPage('tickets', `
         <div class="card">
             <h2>🎫 Interactive Ticket Interface Control</h2>
-            <p>Deploy a clean ticket creation module framework cleanly. Clicking the dispatch button sends a dynamic selection interface containing active buttons.</p>
+            <p>Deploy your ticket creation module system. Clicking the button below automatically updates the layout in channel <strong>1512552819172053172</strong>.</p>
             <form method="POST" action="/tickets/deploy">
-                <label style="font-weight: bold; display: block; margin-bottom: 5px;">Target Text Channel ID</label>
-                <input type="text" name="targetChannelId" placeholder="Paste text channel ID here..." required />
-                <button type="submit" class="btn">Deploy Live Panel</button>
+                <button type="submit" class="btn">Deploy Live Support Panel</button>
             </form>
         </div>
     `));
 });
 
 app.post('/tickets/deploy', checkAuth, async (req, res) => {
-    const channel = client.channels.cache.get(req.body.targetChannelId);
-    if (!channel) return res.send("<script>alert('Target text channel not found.'); window.location='/tickets';</script>");
+    const channel = client.channels.cache.get(CONFIG.FIXED_TICKET_CHANNEL_ID);
+    if (!channel) return res.send("<script>alert('Fixed Ticket Channel (1512552819172053172) could not be found.'); window.location='/tickets';</script>");
 
     const embed = new EmbedBuilder()
         .setColor(CONFIG.PURPLE_HEX)
@@ -272,7 +267,7 @@ app.post('/tickets/deploy', checkAuth, async (req, res) => {
     });
 
     await channel.send({ embeds: [embed], components: [row] });
-    res.send("<script>alert('Panel successfully dropped inside Discord.'); window.location='/tickets';</script>");
+    res.send("<script>alert('Support Panel successfully deployed inside channel 1512552819172053172!'); window.location='/tickets';</script>");
 });
 
 app.get('/modding', checkAuth, (req, res) => {
@@ -412,7 +407,7 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 // ==========================================
-// 5. RUNTIME STREAMS CAPTURE LOGIN
+// 5. RUNTIME STARTUP
 // ==========================================
 client.once('ready', () => {
     console.log(`🤖 Logged into Discord API as ${client.user.tag}`);
