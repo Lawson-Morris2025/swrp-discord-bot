@@ -249,8 +249,8 @@ app.get('/announcements', checkAuth, (req, res) => {
         </div>
 
         <script>
-            const startText = "🏴\u200D󠁧󠁢󠁷󠁬󠁳󠁿 **SOUTH WALES RP SESSION STARTED** 🏴\u200D󠁧󠁢󠁷󠁬󠁳󠁿\\n\\nA roleplay session is now active. Please follow all server rules and maintain realistic roleplay.\\n\\n🔹 **Active Staff On Duty**\\n🔹 **Professional RP Expected**\\n🔹 **Emergency Services Available**\\n🔹 **Civilian Opportunities Open**\\n\\nEnjoy your time in South Wales RP!";
-            const endText = "🏴\u200D󠁧󠁢󠁷󠁬󠁳󠁿 **SOUTH WALES RP SESSION ENDED** 🏴\u200D󠁧󠁢󠁷󠁬󠁳󠁿\\n\\nThe current roleplay session has ended. Thank you to everyone who attended.\\n\\nWe appreciate your support and hope to see you next time.";
+            const startText = "🏴\u200D็ก **SOUTH WALES RP SESSION STARTED** 🏴\u200D็ก\\n\\nA roleplay session is now active. Please follow all server rules and maintain realistic roleplay.\\n\\n🔹 **Active Staff On Duty**\\n🔹 **Professional RP Expected**\\n🔹 **Emergency Services Available**\\n🔹 **Civilian Opportunities Open**\\n\\nEnjoy your time in South Wales RP!";
+            const endText = "🏴\u200D็ก **SOUTH WALES RP SESSION ENDED** 🏴\u200D็ก\\n\\nThe current roleplay session has ended. Thank you to everyone who attended.\\n\\nWe appreciate your support and hope to see you next time.";
 
             const dropZone = document.getElementById('dropZone');
             const fileInput = document.getElementById('fileInput');
@@ -797,15 +797,15 @@ client.once('ready', async () => {
     const commands = [
         new SlashCommandBuilder()
             .setName('setverify')
-            .setDescription('Spawns the SWRP click-to-verify secure login portal embed.')
+            .setDescription('Setup the click-to-verify secure portal link.')
             .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
         new SlashCommandBuilder()
             .setName('setcallsignpanel')
-            .setDescription('Spawns the staff callsign registry interface configuration hook module panel.')
+            .setDescription('Deploy the staff callsign request panel.')
             .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
         new SlashCommandBuilder()
             .setName('listcallsign')
-            .setDescription('Returns a live matrix dataset checklist log of every single approved callsign record on current active instance database file context.')
+            .setDescription('View a live roster of all approved staff callsigns.')
     ].map(command => command.toJSON());
 
     const rest = new REST({ version: '10' }).setToken(CONFIG.TOKEN);
