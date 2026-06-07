@@ -27,6 +27,23 @@ if (!fs.existsSync(uploadDir)){
     fs.mkdirSync(uploadDir, { recursive: true });
 }
 
+// Simple JSON Database path for storing approved callsigns
+const DATA_FILE = path.join(__dirname, 'callsigns.json');
+if (!fs.existsSync(DATA_FILE)) {
+    fs.writeFileSync(DATA_FILE, JSON.stringify({}, null, 4));
+}
+
+// Helper functions to read/write persistent callsign records
+function getCallsigns() {
+    try { return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); }
+    catch (e) { return {}; }
+}
+function saveCallsign(discordId, data) {
+    const db = getCallsigns();
+    db[discordId] = data;
+    fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 4));
+}
+
 // Configure how files are saved locally
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, uploadDir),
@@ -60,6 +77,7 @@ const CONFIG = {
     PURPLE_HEX: '#7B2CBF', 
     DASHBOARD_PASSWORD: process.env.DASHBOARD_PASSWORD || 'StaffPass123',
     FIXED_TICKET_CHANNEL_ID: '1512552819172053172',
+    OWNER_DISCORD_ID: 'YOUR_PERSONAL_DISCORD_USER_ID', // <-- CHANGE THIS to your exact Discord ID so the bot can DM you!
     CHANNELS: {
         ANNOUNCEMENTS: '1512759729829580800', 
         TICKET_LOGS: process.env.TICKET_LOG_CHANNEL_ID,
@@ -477,8 +495,10 @@ client.on('guildMemberAdd', async (member) => {
 client.on('interactionCreate', async (interaction) => {
     // Handle Slash Commands
     if (interaction.isChatInputCommand()) {
-        if (interaction.commandName === 'setverify') {
-            if (!interaction.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+        const { commandName, channel, member } = interaction;
+
+        if (commandName === 'setverify') {
+            if (!member.permissions.has(PermissionFlagsBits.ManageChannels)) {
                 return interaction.reply({ content: '❌ You lack authorizations to run this config setup.', ephemeral: true });
             }
 
@@ -495,12 +515,58 @@ client.on('interactionCreate', async (interaction) => {
                     .setStyle(ButtonStyle.Success)
             );
 
-            await interaction.channel.send({ embeds: [embed], components: [row] });
+            await channel.send({ embeds: [embed], components: [row] });
             return interaction.reply({ content: '🚀 Verification portal posted securely inside this workspace channel!', ephemeral: true });
+        }
+
+        // Spawn Callsign Request Panel Embed
+        if (commandName === 'setcallsignpanel') {
+            if (!member.permissions.has(PermissionFlagsBits.ManageChannels)) {
+                return interaction.reply({ content: '❌ Out of bounds permissions hierarchy error.', ephemeral: true });
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor(CONFIG.PURPLE_HEX)
+                .setTitle('📋 SWRP Staff Callsign Management')
+                .setDescription('Request your official roster identification number using the module below.\n\nAll configurations map directly to the `ST-number` structural tracking template rules.');
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('trigger_callsign_modal')
+                    .setLabel('Request Callsign')
+                    .setEmoji('🆔')
+                    .setStyle(ButtonStyle.Primary)
+            );
+
+            await channel.send({ embeds: [embed], components: [row] });
+            return interaction.reply({ content: 'Panel deployed successfully!', ephemeral: true });
+        }
+
+        // List Every Approved Callsign
+        if (commandName === 'listcallsign') {
+            const db = getCallsigns();
+            const keys = Object.keys(db);
+
+            if (keys.length === 0) {
+                return interaction.reply({ content: '📭 The internal staff roster database contains no active callsign logs.', ephemeral: true });
+            }
+
+            const listEmbed = new EmbedBuilder()
+                .setColor(CONFIG.PURPLE_HEX)
+                .setTitle('📋 Active Staff Identification Roster')
+                .setTimestamp();
+
+            let detailsString = '';
+            keys.forEach(id => {
+                detailsString += `• <@${id}> | **Roblox:** ${db[id].roblox} ➔ **Callsign:** \`${db[id].callsign}\`\n`;
+            });
+
+            listEmbed.setDescription(detailsString);
+            return interaction.reply({ embeds: [listEmbed] });
         }
     }
 
-    // Handle Button Click (Triggers the Modal Prompt)
+    // Handle Verification Modal Trigger
     if (interaction.isButton() && interaction.customId === 'trigger_verify_modal') {
         const modal = new ModalBuilder()
             .setCustomId('roblox_verify_modal')
@@ -521,7 +587,7 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.showModal(modal);
     }
 
-    // Handle Modal Submission (Processes username, updates nickname strictly to Roblox name, swaps roles)
+    // Handle Verification Modal Processing
     if (interaction.isModalSubmit() && interaction.customId === 'roblox_verify_modal') {
         await interaction.deferReply({ ephemeral: true });
         
@@ -537,35 +603,153 @@ client.on('interactionCreate', async (interaction) => {
         
         try {
             const member = await guild.members.fetch(user.id);
-            
-            // Set the nickname strictly to their Roblox Username
-            await member.setNickname(robloxUsername).catch(err => {
-                console.warn(`Could not adjust nickname for ${user.username}. (Likely server owner or high admin hierarchy permissions)`);
-            });
+            await member.setNickname(robloxUsername).catch(() => null);
 
-            // Remove unverified role if they have it
             if (unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
                 await member.roles.remove(unverifiedRole);
             }
-            
-            // Add Civilian role
             await member.roles.add(civilianRole);
             
             return interaction.editReply({ content: `✅ Verification successful! Your profile nickname has been updated to **${robloxUsername}** and your Civilian clearance is open.` });
         } catch (err) {
-            console.error(err);
-            return interaction.editReply({ content: '❌ Role swap adjustment rejected. Ensure the bot role sits ABOVE both the "Unverified" and "Civilian" roles in your Server Settings role hierarchy.' });
+            return interaction.editReply({ content: '❌ Role swap adjustment rejected. Check role hierarchy constraints.' });
         }
     }
 
-    // Handle Support Ticket Buttons
-    if (!interaction.isButton()) return;
-    const { user, channel, customId } = interaction;
+    // Handle Callsign Request Modal Trigger
+    if (interaction.isButton() && interaction.customId === 'trigger_callsign_modal') {
+        const modal = new ModalBuilder()
+            .setCustomId('callsign_request_modal')
+            .setTitle('Staff Callsign Allocation Request');
 
-    if (customId.startsWith('ticket_')) {
+        const numberInput = new TextInputBuilder()
+            .setCustomId('callsign_num')
+            .setLabel('What number do you want? (e.g. 104)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Enter numbers only...')
+            .setRequired(true);
+
+        const robloxInput = new TextInputBuilder()
+            .setCustomId('callsign_roblox')
+            .setLabel('Confirm your Roblox username')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Enter username here...')
+            .setRequired(true);
+
+        modal.addComponents(
+            new ActionRowBuilder().addComponents(numberInput),
+            new ActionRowBuilder().addComponents(robloxInput)
+        );
+
+        return interaction.showModal(modal);
+    }
+
+    // Handle Modal Submission (Forwards Request Data via DM to Owner/Admin ID)
+    if (interaction.isModalSubmit() && interaction.customId === 'callsign_request_modal') {
         await interaction.deferReply({ ephemeral: true });
-        const type = customId.split('_')[1];
-        const roomName = `${type}-${user.username}`.toLowerCase();
+
+        const rawNumber = interaction.fields.getTextInputValue('callsign_num').replace(/\D/g, ''); 
+        const robloxUser = interaction.fields.getTextInputValue('callsign_roblox');
+        const calculatedCallsign = `ST-${rawNumber}`;
+
+        if (!rawNumber) {
+            return interaction.editReply({ content: '❌ Processing failed: A valid numeric configuration input is required.' });
+        }
+
+        try {
+            const owner = await client.users.fetch(CONFIG.OWNER_DISCORD_ID);
+            
+            const dmEmbed = new EmbedBuilder()
+                .setColor(CONFIG.PURPLE_HEX)
+                .setTitle('🔔 New Staff Callsign Request')
+                .addFields(
+                    { name: 'Staff Member', value: `<@${interaction.user.id}> (${interaction.user.tag})`, inline: false },
+                    { name: 'Roblox Username', value: robloxUser, inline: true },
+                    { name: 'Requested Callsign', value: `\`${calculatedCallsign}\``, inline: true }
+                )
+                .setFooter({ text: 'South Wales RP Management Gateway' })
+                .setTimestamp();
+
+            const actionRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`approve_cs_${interaction.user.id}_${rawNumber}_${interaction.channel.id}`)
+                    .setLabel('Approve Request')
+                    .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId(`deny_cs_${interaction.user.id}_${interaction.channel.id}`)
+                    .setLabel('Deny Request')
+                    .setStyle(ButtonStyle.Danger)
+            );
+
+            await owner.send({ embeds: [dmEmbed], components: [actionRow] });
+            return interaction.editReply({ content: `✅ Your tracking request for **${calculatedCallsign}** has been routed to administration for manual verification review.` });
+        } catch (err) {
+            console.error(err);
+            return interaction.editReply({ content: '❌ System interface tracking timeout. Configuration error checking system configuration variables values.' });
+        }
+    }
+
+    // Handle DM Action Responses (Approve / Deny Operations Matrix Logic)
+    if (interaction.isButton() && (interaction.customId.startsWith('approve_cs_') || interaction.customId.startsWith('deny_cs_'))) {
+        await interaction.deferUpdate();
+        
+        const parts = interaction.customId.split('_');
+        const actionType = parts[0]; 
+        const staffId = parts[2];
+
+        if (actionType === 'approve') {
+            const targetNum = parts[3];
+            const originalChannelId = parts[4];
+            const assignedCallsign = `ST-${targetNum}`;
+
+            // Read existing records to find out their profile name details
+            let robloxNamePlaceholder = 'StaffMember';
+            try {
+                const guild = client.guilds.cache.first();
+                const memberProfile = await guild.members.fetch(staffId);
+                robloxNamePlaceholder = memberProfile.nickname || memberProfile.user.username;
+            } catch {}
+
+            // Save to Persistent local file database layer
+            saveCallsign(staffId, {
+                roblox: robloxNamePlaceholder,
+                callsign: assignedCallsign,
+                approvedAt: new Date().toISOString()
+            });
+
+            // Post dispatch success confirmation down line into origin channel thread tracking loop context
+            const targetChannel = client.channels.cache.get(originalChannelId);
+            if (targetChannel) {
+                await targetChannel.send({ content: `🎉 <@${staffId}>, your callsign request has been approved! Your callsign is now **${assignedCallsign}**.` });
+            }
+
+            // Clean down interactive console display
+            await interaction.editReply({ 
+                content: `✅ Cleared cleanly. Approved staff workspace allocation data logged out successfully.`, 
+                components: [] 
+            });
+
+        } else if (actionType === 'deny') {
+            const originalChannelId = parts[3];
+            
+            const targetChannel = client.channels.cache.get(originalChannelId);
+            if (targetChannel) {
+                await targetChannel.send({ content: `❌ <@${staffId}>, your recent callsign request has been denied by administration.` });
+            }
+
+            await interaction.editReply({ 
+                content: `❌ Allocation configuration rejected. Notification passed back down line safely.`, 
+                components: [] 
+            });
+        }
+    }
+
+    // General Button Handlers for Tickets Dashboard System Integration
+    if (interaction.customId.startsWith('ticket_')) {
+        await interaction.deferReply({ ephemeral: true });
+        const type = interaction.customId.split('_')[1];
+        const roomName = `${type}-${interaction.user.username}`.toLowerCase();
+        const guild = interaction.guild;
 
         const ticketChannel = await guild.channels.create({
             name: roomName,
@@ -573,7 +757,7 @@ client.on('interactionCreate', async (interaction) => {
             parent: CONFIG.CHANNELS.CATEGORY_TICKETS || null,
             permissionOverwrites: [
                 { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-                { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] },
+                { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] },
                 { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
             ]
         });
@@ -581,14 +765,14 @@ client.on('interactionCreate', async (interaction) => {
         const welcomeEmbed = new EmbedBuilder()
             .setColor(CONFIG.PURPLE_HEX)
             .setTitle(`Support Workspace Opened`)
-            .setDescription(`Welcome <@${user.id}>. A member of our staff team will be right with you. Please leave any relevant details or reports here right away.`);
+            .setDescription(`Welcome <@${interaction.user.id}>. A member of our staff team will be right with you. Please leave any relevant details or reports here right away.`);
 
         const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket').setStyle(ButtonStyle.Danger));
-        await ticketChannel.send({ content: `<@${user.id}>`, embeds: [welcomeEmbed], components: [row] });
+        await ticketChannel.send({ content: `<@${interaction.user.id}>`, embeds: [welcomeEmbed], components: [row] });
         await interaction.editReply({ content: `Private workspace launched: <#${ticketChannel.id}>` });
     }
 
-    if (customId === 'close_ticket') {
+    if (interaction.customId === 'close_ticket') {
         await interaction.reply({ content: '🔒 Finalizing transcript buffers. Closing space cleanly in 5 seconds...' });
         
         if (CONFIG.CHANNELS.TICKET_LOGS) {
@@ -597,12 +781,12 @@ client.on('interactionCreate', async (interaction) => {
                 const logEmbed = new EmbedBuilder()
                     .setColor(CONFIG.PURPLE_HEX)
                     .setTitle('📊 Ticket Archived')
-                    .setDescription(`Channel reference **${channel.name}** has been processed and deleted.`)
+                    .setDescription(`Channel reference **${interaction.channel.name}** has been processed and deleted.`)
                     .setTimestamp();
                 await logs.send({ embeds: [logEmbed] });
             }
         }
-        setTimeout(() => channel.delete().catch(() => null), 5000);
+        setTimeout(() => interaction.channel.delete().catch(() => null), 5000);
     }
 });
 
@@ -617,7 +801,14 @@ client.once('ready', async () => {
         new SlashCommandBuilder()
             .setName('setverify')
             .setDescription('Spawns the SWRP click-to-verify secure login portal embed.')
-            .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+        new SlashCommandBuilder()
+            .setName('setcallsignpanel')
+            .setDescription('Spawns the staff callsign registry interface configuration hook module panel.')
+            .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+        new SlashCommandBuilder()
+            .setName('listcallsign')
+            .setDescription('Returns a live matrix dataset checklist log of every single approved callsign record on current active instance database file context.')
     ].map(command => command.toJSON());
 
     const rest = new REST({ version: '10' }).setToken(CONFIG.TOKEN);
