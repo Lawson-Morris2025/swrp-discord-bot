@@ -249,8 +249,8 @@ app.get('/announcements', checkAuth, (req, res) => {
         </div>
 
         <script>
-            const startText = "🏴\u200D็ก **SOUTH WALES RP SESSION STARTED** 🏴\u200D็ก\\n\\nA roleplay session is now active. Please follow all server rules and maintain realistic roleplay.\\n\\n🔹 **Active Staff On Duty**\\n🔹 **Professional RP Expected**\\n🔹 **Emergency Services Available**\\n🔹 **Civilian Opportunities Open**\\n\\nEnjoy your time in South Wales RP!";
-            const endText = "🏴\u200D็ก **SOUTH WALES RP SESSION ENDED** 🏴\u200D็ก\\n\\nThe current roleplay session has ended. Thank you to everyone who attended.\\n\\nWe appreciate your support and hope to see you next time.";
+            const startText = "🏴\\u200D็ก **SOUTH WALES RP SESSION STARTED** 🏴\\u200D็ก\\n\\nA roleplay session is now active. Please follow all server rules and maintain realistic roleplay.\\n\\n🔹 **Active Staff On Duty**\\n🔹 **Professional RP Expected**\\n🔹 **Emergency Services Available**\\n🔹 **Civilian Opportunities Open**\\n\\nEnjoy your time in South Wales RP!";
+            const endText = "🏴\\u200D็ก **SOUTH WALES RP SESSION ENDED** 🏴\\u200D็ก\\n\\nThe current roleplay session has ended. Thank you to everyone who attended.\\n\\nWe appreciate your support and hope to see you next time.";
 
             const dropZone = document.getElementById('dropZone');
             const fileInput = document.getElementById('fileInput');
@@ -517,7 +517,7 @@ client.on('interactionCreate', async (interaction) => {
                     .setLabel('Verify Account')
                     .setEmoji('✅')
                     .setStyle(ButtonStyle.Success)
-            );
+                );
 
             await channel.send({ embeds: [embed], components: [row] });
             return interaction.reply({ content: '🚀 Verification portal posted securely inside this workspace channel!', ephemeral: true });
@@ -759,13 +759,19 @@ client.on('interactionCreate', async (interaction) => {
             ]
         });
 
+        // Find the Staff team role to ping them inside the new ticket room
+        const staffRole = guild.roles.cache.find(r => r.name === 'Staff team');
+        const staffMention = staffRole ? `<@&${staffRole.id}>` : '@Staff team';
+
         const welcomeEmbed = new EmbedBuilder()
             .setColor(CONFIG.PURPLE_HEX)
             .setTitle(`Support Workspace Opened`)
             .setDescription(`Welcome <@${interaction.user.id}>. A member of our staff team will be right with you. Please leave any relevant details or reports here right away.`);
 
         const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket').setStyle(ButtonStyle.Danger));
-        await ticketChannel.send({ content: `<@${interaction.user.id}>`, embeds: [welcomeEmbed], components: [row] });
+        
+        // Mentions both the opening user and the staff team role together
+        await ticketChannel.send({ content: `${staffMention} | <@${interaction.user.id}>`, embeds: [welcomeEmbed], components: [row] });
         await interaction.editReply({ content: `Private workspace launched: <#${ticketChannel.id}>` });
     }
 
